@@ -5,94 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Birthday AR Scavenger Hunt</title>
     
-    <!-- A-Frame and MindAR for WebAR Image Tracking -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
-    <!-- Screen Edge Proximity Radar Vignette -->
-    <div id="radar-vignette"></div>
 
-    <!-- UI Overlay Layer -->
+    <!-- UI Overlay -->
     <div id="ui-layer">
-      <!-- Top HUD — Menu Only -->
-      <div class="top-hud">
-        <div></div>
-        <button id="menu-btn" class="icon-btn interactive" title="Menu">☰</button>
+      <div class="top-hud"><div></div></div>
+
+      <div id="guidance-box" class="guidance-box interactive">
+        Tap below to start your birthday AR experience!
       </div>
 
-      <!-- Center Dynamic Guidance Prompt -->
-      <div id="guidance-box" class="guidance-box">
-        Tap below to start your birthday AR journey!
-      </div>
-
-      <!-- Bottom Context Action Controls -->
       <div class="bottom-controls">
         <button id="main-action-btn" class="action-btn interactive">
-          <span>✨ Start Scavenger Hunt</span>
+          <span>✨ Start AR</span>
         </button>
       </div>
     </div>
 
-    <!-- Slide-In Menu Panel -->
-    <div id="menu-panel">
-      <div class="menu-header">
-        <div class="menu-title">Menu</div>
-        <button id="menu-close" class="icon-btn" style="width:30px;height:30px;font-size:12px;">✕</button>
-      </div>
-
-      <!-- SFX Toggle -->
-      <div class="menu-section">
-        <div class="menu-row interactive" id="sfx-toggle-row">
-          <span>🔊 Sound Effects</span>
-          <div class="toggle-switch active" id="sfx-toggle">
-            <div class="toggle-knob"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Saved Progress -->
-      <div class="menu-section">
-        <div class="menu-section-label">Saved Progress</div>
-        <div id="progress-list">
-          <div class="empty-progress" id="empty-progress-msg">
-            No memories discovered yet
-          </div>
-          <!-- Cards injected dynamically by JS on discovery -->
-        </div>
-      </div>
-
-      <!-- Restart (hidden until first discovery) -->
-      <div class="menu-section" id="restart-section" style="display: none;">
-        <button id="restart-btn" class="menu-restart-btn interactive">
-          🔄 Restart Scavenger Hunt
-        </button>
-      </div>
-    </div>
-
-    <!-- Celebration Screen (Unlocked when both coasters discovered & placed) -->
-    <div id="celebration-overlay">
-      <div class="celebration-title">🎉 Happy Birthday! 🎉</div>
-      <div class="celebration-message">
-        You discovered all the holographic memories! Enjoy the moments and keep them with you always.
-      </div>
-      <button id="celebration-restart-btn" class="action-btn interactive">
-        <span>🔄 Restart Scavenger Hunt</span>
-      </button>
-    </div>
-
-    <!--
-      ═══════════════════════════════════════════════════════════════════
-      2-TARGET ROSTER (v3 — living frames removed)
-
-        Index 0 — COASTER: Uncle Memorial  → memorial.mp4  [Chroma Key Hologram] (marker1.jpg)
-        Index 1 — COASTER: Birthday Wishes → dummy.mp4 (swap montage.mp4 on release) (marker0.jpg)
-      ═══════════════════════════════════════════════════════════════════
-    -->
-
-    <!-- MindAR Viewport Container -->
+    <!-- AR Container -->
     <div id="ar-container">
       <a-scene
         id="ar-scene"
@@ -103,9 +38,8 @@
         vr-mode-ui="enabled: false"
         device-orientation-permission-ui="enabled: false"
       >
-      <a-assets timeout="5000">
-
-        <!-- Target 0 — Uncle Memorial (Chroma Key Hologram - marker1.jpg) -->
+      <a-assets timeout="10000">
+        <!-- Target 0: Uncle Memorial (marker1.jpg) -->
         <video
           id="video-memorial"
           src="./assets/memorial.mp4"
@@ -116,10 +50,7 @@
           crossorigin="anonymous"
         ></video>
 
-        <!--
-          Target 1 — Birthday Wishes (marker0.jpg)
-          PRODUCTION SWAP: change src to ./assets/montage.mp4 before final release.
-        -->
+        <!-- Target 1: Birthday Wishes (marker0.jpg) — swap to montage.mp4 for release -->
         <video
           id="video-montage"
           src="./assets/dummy.mp4"
@@ -129,21 +60,19 @@
           webkit-playsinline
           crossorigin="anonymous"
         ></video>
-
       </a-assets>
 
-      <!-- Main Camera -->
       <a-camera id="main-camera" position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Target 0: Uncle Memorial Coaster (marker1.jpg) -->
+      <!-- Target 0: Uncle Memorial (marker1.jpg) -->
       <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
 
-      <!-- Target 1: Birthday Wishes Coaster (marker0.jpg) -->
+      <!-- Target 1: Birthday Wishes (marker0.jpg) -->
       <a-entity id="target-1" mindar-image-target="targetIndex: 1"></a-entity>
 
-    </a-scene>
-  </div>
+      </a-scene>
+    </div>
 
-  <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>
