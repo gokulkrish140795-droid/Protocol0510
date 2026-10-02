@@ -84,43 +84,48 @@ AFRAME.registerShader('chromakey', {
     }
   `,
 
-  /**
-   * init — called once when the material is first attached.
-   * Wires the video texture into the shader uniform `src`.
-   */
-  init(data) {
-    // Build a standard Three.js ShaderMaterial via the parent helper
-    this.material = new THREE.ShaderMaterial({
-      uniforms: {
-        src:            { value: data.src   || null },
-        keyColor:       { value: new THREE.Color(data.keyColor) },
-        colorThreshold: { value: data.colorThreshold },
-        smoothness:     { value: data.smoothness },
-        rimStrength:    { value: data.rimStrength },
-      },
-      vertexShader:   this.vertexShader,
-      fragmentShader: this.fragmentShader,
-      transparent:    true,
-      side:           THREE.DoubleSide,
-      depthWrite:     false,   // prevents z-fighting with transparent pixels
-    });
-
-    return this.material;
+  init: function (data) {
+    AFRAME.Shader.prototype.init.call(this, data);
+    this.material.transparent = true;
+    this.material.side = THREE.DoubleSide;
+    this.material.depthWrite = false;
   },
 
   /**
    * update — called whenever schema properties change.
-   * Keeps uniforms in sync if the Director tweaks threshold values at runtime.
+   * Keeps uniforms in sync and ensures video texture is bound.
    */
-  update(data) {
-    if (!this.material) return;
+  update: function (data) {
+    AFRAME.Shader.prototype.update.call(this, data);
+    if (!this.material || !this.material.uniforms) return;
 
     if (data.src) {
-      this.material.uniforms.src.value = data.src;
+      let videoEl = null;
+      if (typeof data.src === 'string') {
+        videoEl = document.querySelector(data.src);
+      } else if (data.src instanceof HTMLVideoElement) {
+        videoEl = data.src;
+      }
+      if (videoEl && (!this.material.uniforms.src.value || !(this.material.uniforms.src.value instanceof THREE.Texture))) {
+        const tex = new THREE.VideoTexture(videoEl);
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.format = THREE.RGBAFormat;
+        this.material.uniforms.src.value = tex;
+      }
     }
-    this.material.uniforms.keyColor.value.set(data.keyColor);
-    this.material.uniforms.colorThreshold.value = data.colorThreshold;
-    this.material.uniforms.smoothness.value      = data.smoothness;
-    this.material.uniforms.rimStrength.value     = data.rimStrength;
+
+    if (data.keyColor && this.material.uniforms.keyColor) {
+      this.material.uniforms.keyColor.value.set(data.keyColor);
+    }
+    if (data.colorThreshold !== undefined && this.material.uniforms.colorThreshold) {
+      this.material.uniforms.colorThreshold.value = data.colorThreshold;
+    }
+    if (data.smoothness !== undefined && this.material.uniforms.smoothness) {
+      this.material.uniforms.smoothness.value = data.smoothness;
+    }
+    if (data.rimStrength !== undefined && this.material.uniforms.rimStrength) {
+      this.material.uniforms.rimStrength.value = data.rimStrength;
+    }
   },
 });

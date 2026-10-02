@@ -4,3 +4,4 @@ dist/
 Thumbs.db
 *.local
 .env
+backup_originals/

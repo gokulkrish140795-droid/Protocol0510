@@ -24,29 +24,27 @@
 
 ---
 
-## 7-Target Final Architecture
+## 5-Target Final Architecture (v2 — calibrated 2026-10-02)
 
 ### System Overview
 
 ```
 TARGETS array (index → type):
 
-  [0] Coaster #1  — Birthday Montage   → montage.mp4        (standard floor screen)
-  [1] Coaster #2  — Uncle Memorial     → memorial.mp4        (CHROMA KEY HOLOGRAM)
-  [2] Coaster #3  — Third Memory       → coaster3.mp4        (standard floor screen)
-  ──────────────────────────────────────────────────────────────────────────
-  [3] Frame #1    — Living Photo Frame → frame1_live.mp4      isEasterEgg: true
-  [4] Frame #2    — Living Photo Frame → frame2_live.mp4      isEasterEgg: true
-  [5] Frame #3    — Living Photo Frame → frame3_live.mp4      isEasterEgg: true
-  [6] Frame #4    — Living Photo Frame → frame4_live.mp4      isEasterEgg: true
+  [0] Coaster #1  — Birthday Wishes    → dummy.mp4 (→ montage.mp4 on release)   flat
+  [1] Coaster #2  — Uncle Memorial     → memorial.mp4                            CHROMA KEY HOLOGRAM
+  ──────────────────────────────────────────────────────────────────────────────────────────────────
+  [2] Frame #1    — Living Photo Frame → frame1_live.mp4   isEasterEgg: true
+  [3] Frame #2    — Living Photo Frame → frame2_live.mp4   isEasterEgg: true
+  [4] Frame #3    — Living Photo Frame → frame3_live.mp4   isEasterEgg: true
 ```
 
 ### Scalability Rule — CRITICAL
 
 > **The TARGETS array is the single source of truth.**
-> - Coaster count: `TARGETS.filter(t => !t.isEasterEgg).length` — **never hardcode `3`.**
-> - Easter egg count: `TARGETS.filter(t => t.isEasterEgg).length` — **never hardcode `4`.**
-> - Celebration triggers when: `TARGETS.filter(t => !t.isEasterEgg).every(t => t.placed === true)`
+> - Coaster count: `TARGETS.filter(t => !t.isEasterEgg).length` — **never hardcode `2`.**
+> - Easter egg count: `TARGETS.filter(t => t.isEasterEgg).length` — **never hardcode `3`.**
+> - Celebration triggers when: `COASTER_TARGETS.every(t => t.placed === true)` — frames NEVER counted.
 
 ---
 
@@ -56,70 +54,54 @@ TARGETS array (index → type):
 const TARGETS = [
   // ── COASTERS (Scavenger Hunt) ──────────────────────────────────────────
   {
-    index: 0,
-    title: 'Birthday Montage',
-    videoId: 'video-montage',
-    videoSrc: '/assets/montage.mp4',
-    shader: 'flat',           // standard A-Frame flat material
+    index:       0,
+    title:       'Birthday Wishes',
+    // TESTING CONTRACT: src = dummy.mp4. SWAP → montage.mp4 before final release.
+    videoId:     'video-montage',
+    emoji:       '🎂',
+    shader:      'flat',
     isEasterEgg: false,
-    discovered: false,
-    placed: false,
+    discovered:  false,
+    placed:      false,
   },
   {
-    index: 1,
-    title: 'Uncle Memorial',
-    videoId: 'video-memorial',
-    videoSrc: '/assets/memorial.mp4',
-    shader: 'chromakey',      // src/chromakey.js — green despill + rim glow
+    index:       1,
+    title:       'Uncle Memorial',
+    videoId:     'video-memorial',
+    emoji:       '🕊️',
+    shader:      'chromakey',     // src/chromakey.js — green despill + rim glow
     isEasterEgg: false,
-    discovered: false,
-    placed: false,
-  },
-  {
-    index: 2,
-    title: 'Third Memory',
-    videoId: 'video-coaster3',
-    videoSrc: '/assets/coaster3.mp4',
-    shader: 'flat',
-    isEasterEgg: false,
-    discovered: false,
-    placed: false,
+    discovered:  false,
+    placed:      false,
   },
   // ── LIVING PHOTO FRAMES (Silent Easter Eggs) ───────────────────────────
   {
-    index: 3,
-    title: 'Living Frame 1',
-    videoId: 'video-frame1',
-    videoSrc: '/assets/frame1_live.mp4',
+    index:       2,
+    title:       'Living Frame 1',
+    videoId:     'video-frame1',
     isEasterEgg: true,
-    aspectRatio: null,        // Director to provide — e.g. { w: 1.2, h: 1.6 }
+    aspectRatio: null,            // default: w=1.2 h=1.6 (portrait 4×6)
   },
   {
-    index: 4,
-    title: 'Living Frame 2',
-    videoId: 'video-frame2',
-    videoSrc: '/assets/frame2_live.mp4',
+    index:       3,
+    title:       'Living Frame 2',
+    videoId:     'video-frame2',
     isEasterEgg: true,
     aspectRatio: null,
   },
   {
-    index: 5,
-    title: 'Living Frame 3',
-    videoId: 'video-frame3',
-    videoSrc: '/assets/frame3_live.mp4',
-    isEasterEgg: true,
-    aspectRatio: null,
-  },
-  {
-    index: 6,
-    title: 'Living Frame 4',
-    videoId: 'video-frame4',
-    videoSrc: '/assets/frame4_live.mp4',
+    index:       4,
+    title:       'Living Frame 3',
+    videoId:     'video-frame3',
     isEasterEgg: true,
     aspectRatio: null,
   },
 ];
+
+const COASTER_TARGETS    = TARGETS.filter(t => !t.isEasterEgg); // 2 coasters
+const EASTER_EGG_TARGETS = TARGETS.filter(t =>  t.isEasterEgg); // 3 frames
 ```
+
 
 ---
 
@@ -132,7 +114,7 @@ const TARGETS = [
 5. **Media Playback:** Video streams inline (`playsinline webkit-playsinline`). No iOS fullscreen hijack.
 6. **Menu System:** Hamburger (☰) button top-right opens slide-in menu with SFX toggle, Saved Progress, and Restart.
 7. **Manual Restoration:** From Saved Progress, tapping "Re-place" re-parents hologram back to camera (back to Step 3).
-8. **Completion:** All 3 coasters discovered & placed → celebration overlay + fanfare + restart button.
+8. **Completion:** Both coasters discovered & placed → celebration overlay + fanfare + restart button.
 
 > ⚠️ **Easter Egg targets (`isEasterEgg: true`) are entirely parallel — they NEVER enter the 8-step state machine.**
 
@@ -341,25 +323,17 @@ Director must confirm physical frame aspect ratios — see Resources table below
 
 ---
 
-## 📋 Resources Needed from Director
+## 📋 Asset Manifest (5-Target Calibration — v2)
 
-> **Code is blocked on the following assets. All must be present before Phase 3/4 coding begins.**
+> All Phase 3 & 4 assets are now present. `dummy.mp4` is the testing stand-in for Target 0.
 
-| # | File | Format | Status |
-|---|------|--------|--------|
-| 1 | `public/assets/montage.mp4` | MP4 H.264 | ✅ Present |
-| 2 | `public/assets/memorial.mp4` | MP4 H.264, **pure `#00FF00` green screen** | ✅ Present — confirm green is exact `#00FF00` |
-| 3 | `public/assets/coaster3.mp4` | MP4 H.264 | ⏳ Needed |
-| 4 | `public/assets/marker0.png` | PNG high-contrast | ✅ Present |
-| 5 | `public/assets/marker1.png` | PNG high-contrast | ✅ Present |
-| 6 | `public/assets/marker2.png` | PNG high-contrast (Coaster #3) | ⏳ Needed |
-| 7 | `public/assets/marker3.png` | PNG high-contrast (Frame #1 physical photo) | ⏳ Needed |
-| 8 | `public/assets/marker4.png` | PNG high-contrast (Frame #2 physical photo) | ⏳ Needed |
-| 9 | `public/assets/marker5.png` | PNG high-contrast (Frame #3 physical photo) | ⏳ Needed |
-| 10 | `public/assets/marker6.png` | PNG high-contrast (Frame #4 physical photo) | ⏳ Needed |
-| 11 | `public/assets/frame1_live.mp4` | MP4 H.264 | ⏳ Needed |
-| 12 | `public/assets/frame2_live.mp4` | MP4 H.264 | ⏳ Needed |
-| 13 | `public/assets/frame3_live.mp4` | MP4 H.264 | ⏳ Needed |
-| 14 | `public/assets/frame4_live.mp4` | MP4 H.264 | ⏳ Needed |
-| 15 | **Frame aspect ratios (×4)** | e.g. `4:6`, `5:7`, `16:9` per frame | ⏳ Needed — required to size `<a-video>` |
-| 16 | `public/assets/targets.mind` | MindAR binary | ⏳ Must be **recompiled** with all 7 markers (indices 0–6) via https://hiukim.github.io/mind-ar-js-doc/tools/compile |
+| # | File | Status | Notes |
+|---|------|--------|-------|
+| 1 | `public/assets/dummy.mp4` | ✅ Present | Target 0 testing stand-in |
+| 2 | `public/assets/montage.mp4` | ⏳ Swap on release | Change `#video-montage` src in `index.html` |
+| 3 | `public/assets/memorial.mp4` | ✅ Present | Must be pure `#00FF00` green screen |
+| 4 | `public/assets/frame1_live.mp4` | ✅ Present | Target 2 Easter Egg |
+| 5 | `public/assets/frame2_live.mp4` | ✅ Present | Target 3 Easter Egg |
+| 6 | `public/assets/frame3_live.mp4` | ✅ Present | Target 4 Easter Egg |
+| 7 | `public/assets/targets.mind` | ✅ Present | Must include all 5 markers (indices 0–4). Recompile via https://hiukim.github.io/mind-ar-js-doc/tools/compile if adding markers. |
+| 8 | **Frame aspect ratios (×3)** | ⏳ Director to confirm | Used to set `<a-video>` w/h. Default: 1.2 × 1.6 (portrait 4×6). |

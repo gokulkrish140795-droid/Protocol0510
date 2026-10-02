@@ -105,7 +105,7 @@
     <div id="ar-container">
       <a-scene
         id="ar-scene"
-        mindar-image="imageTargetSrc: ./assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no;"
+        mindar-image="imageTargetSrc: ./assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.001; filterBeta: 10; missTolerance: 8;"
         embedded
         color-space="sRGB"
         renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"

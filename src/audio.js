@@ -41,32 +41,8 @@ export function getMuteState() {
  * @param {number} distance - Distance in meters (typically 0.5 to 3.0)
  */
 export function playRadarPing(distance) {
-  if (isMuted || !audioCtx) return;
-  const now = audioCtx.currentTime;
-  
-  // Rate limits pings based on distance: closer = faster repetition
-  const interval = Math.max(0.18, Math.min(1.2, distance * 0.35));
-  if (now - lastPingTime < interval) return;
-  lastPingTime = now;
-
-  // Closer = higher pitched ping (500Hz to 950Hz)
-  const freq = Math.max(500, Math.min(950, 1000 - distance * 150));
-
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(freq, now);
-  osc.frequency.exponentialRampToValueAtTime(freq * 0.8, now + 0.08);
-
-  gain.gain.setValueAtTime(0.08, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-
-  osc.start(now);
-  osc.stop(now + 0.09);
+  // Disabled: Procedural oscillator pinging removed to maintain pristine background audio
+  return;
 }
 
 /**
@@ -211,66 +187,34 @@ export function playCelebrationFanfare() {
 }
 
 /* --------------------------------------------------------------------------
-   Feature #6: Carrying Hum — 220Hz triangle oscillator while holding hologram
+   Feature #6: Carrying Hum (Disabled to keep background audio clean)
    -------------------------------------------------------------------------- */
 export function startCarryingHum() {
-  if (isMuted || !audioCtx || carryOsc) return;
-  carryOsc = audioCtx.createOscillator();
-  carryGain = audioCtx.createGain();
-
-  carryOsc.type = 'triangle';
-  carryOsc.frequency.setValueAtTime(220, audioCtx.currentTime);
-  carryGain.gain.setValueAtTime(0, audioCtx.currentTime);
-  carryGain.gain.linearRampToValueAtTime(0.04, audioCtx.currentTime + 0.3);
-
-  carryOsc.connect(carryGain);
-  carryGain.connect(audioCtx.destination);
-  carryOsc.start();
+  // Disabled: No continuous drone during carry
+  return;
 }
 
 export function stopCarryingHum() {
-  if (!carryOsc || !audioCtx) return;
-  const now = audioCtx.currentTime;
-  carryGain.gain.linearRampToValueAtTime(0, now + 0.2);
-  carryOsc.stop(now + 0.25);
+  if (carryOsc && audioCtx) {
+    try { carryOsc.stop(); } catch (e) {}
+  }
   carryOsc = null;
   carryGain = null;
 }
 
 /* --------------------------------------------------------------------------
-   Feature #5: Ambient Room Awakening Drone — layered sawtooth pads
+   Feature #5: Ambient Room Awakening Drone (Disabled to prevent harsh oscillator buzz)
    -------------------------------------------------------------------------- */
 export function startAmbientDrone(layerCount) {
-  if (isMuted || !audioCtx) return;
-  const baseFreq = 80;
-  const freq = baseFreq * layerCount;
-
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-
-  gain.gain.setValueAtTime(0, audioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.025, audioCtx.currentTime + 2.0);
-
-  const filter = audioCtx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(200, audioCtx.currentTime);
-
-  osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start();
-
-  ambientNodes.push({ osc, gain, filter });
+  // Disabled: Continuous low-frequency sawtooth drone eliminated
+  return;
 }
 
 export function stopAllAmbient() {
-  if (!audioCtx) return;
-  const now = audioCtx.currentTime;
-  ambientNodes.forEach(({ osc, gain }) => {
-    gain.gain.linearRampToValueAtTime(0, now + 0.5);
-    osc.stop(now + 0.6);
-  });
+  if (ambientNodes.length && audioCtx) {
+    ambientNodes.forEach(({ osc }) => {
+      try { osc.stop(); } catch (e) {}
+    });
+  }
   ambientNodes = [];
 }

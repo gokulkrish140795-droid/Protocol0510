@@ -94,30 +94,30 @@ const TARGETS = [
   },
 
   // ── LIVING PHOTO FRAMES (Silent Easter Eggs) ──────────────────────────────
-  // Calibrated with physical frame measurements provided by user:
-  // Target 2: Wedding Photo Frame (marker2.jpg: Length 15.5cm, Breadth 11.0cm -> ratio 1.409)
+  // Calibrated with exact marker image aspect ratios to fit flush inside frame borders:
+  // Target 2: Wedding Photo Frame (marker2.jpg: 3198x3699 -> ratio 1.157)
   {
     index:       2,
     title:       'Living Frame (Wedding)',
     videoId:     'video-frame1',
     isEasterEgg: true,
-    aspectRatio: { w: 1.0, h: 1.409 },
+    aspectRatio: { w: 1.0, h: 1.157 },
   },
-  // Target 3: River Photo Frame (marker3.jpg: Length 16.5cm, Breadth 11.5cm -> ratio 1.435)
+  // Target 3: River Photo Frame (marker3.jpg: 3000x4000 -> ratio 1.333, matches frame2_live.mp4 exactly)
   {
     index:       3,
     title:       'Living Frame (River)',
     videoId:     'video-frame2',
     isEasterEgg: true,
-    aspectRatio: { w: 1.0, h: 1.435 },
+    aspectRatio: { w: 1.0, h: 1.333 },
   },
-  // Target 4: A2 Stage Photo Frame (marker4.jpg: Standard A2 59.4cm x 42.0cm -> ratio 1.414)
+  // Target 4: A2 Stage Photo Frame (marker4.jpg: 2732x4096 -> ratio 1.500)
   {
     index:       4,
     title:       'Living Frame (A2 Stage)',
     videoId:     'video-frame3',
     isEasterEgg: true,
-    aspectRatio: { w: 1.0, h: 1.414 },
+    aspectRatio: { w: 1.0, h: 1.500 },
   },
 ];
 
@@ -173,11 +173,19 @@ function setupUIEventListeners() {
     mainActionBtn.addEventListener('click', handleMainActionButton);
   }
 
-  // Also allow tapping guidance prompt on landing screen to start
+  // Allow tapping guidance prompt or action button to advance AR states
   if (guidanceBox) {
     guidanceBox.addEventListener('click', () => {
-      if (currentState === STATE.UNINITIALIZED) {
-        handleMainActionButton();
+      handleMainActionButton();
+    });
+  }
+
+  // Allow tapping anywhere on the viewport / floor while carrying to drop!
+  const arContainer = document.querySelector('#ar-container');
+  if (arContainer) {
+    arContainer.addEventListener('click', (e) => {
+      if (currentState === STATE.CARRYING) {
+        dropMemoryOnFloor();
       }
     });
   }
@@ -357,7 +365,14 @@ function setupMindAREventListeners() {
  * (in dropMemoryOnFloor), any active frame videos are also muted.
  */
 function attachEasterEggListeners(target, targetEl) {
+  let lostTimeout = null;
+
   targetEl.addEventListener('targetFound', () => {
+    if (lostTimeout) {
+      clearTimeout(lostTimeout);
+      lostTimeout = null;
+    }
+
     const vid = document.getElementById(target.videoId);
     if (!vid) return;
 
@@ -377,20 +392,30 @@ function attachEasterEggListeners(target, targetEl) {
       const h = target.aspectRatio ? target.aspectRatio.h : FRAME_DEFAULT_H;
       plane.setAttribute('width',  w);
       plane.setAttribute('height', h);
+      plane.setAttribute('visible', 'true');
     }
 
-    vid.play().catch(e => console.warn(`Frame ${target.index} play blocked:`, e));
+    if (vid.paused) {
+      vid.play().catch(e => console.warn(`Frame ${target.index} play blocked:`, e));
+    }
   });
 
   targetEl.addEventListener('targetLost', () => {
-    const vid = document.getElementById(target.videoId);
-    if (vid) vid.pause();
+    // Debounce targetLost by 1500ms to eliminate stutter and pausing from hand jitter
+    if (lostTimeout) clearTimeout(lostTimeout);
+    lostTimeout = setTimeout(() => {
+      const vid = document.getElementById(target.videoId);
+      if (vid) vid.pause();
+      const plane = targetEl.querySelector('.frame-video-plane');
+      if (plane) plane.setAttribute('visible', 'false');
+      lostTimeout = null;
+    }, 1500);
   });
 }
 
 /**
  * Phase 4: Builds the flush planar <a-video> inside an Easter Egg target entity.
- * Sits at position 0 0 0.005 on the marker plane — 1:1 flush overlay without clipping.
+ * Sits at position 0 0 0.002 on the marker plane — flush overlay without clipping or parallax float.
  */
 function attachFrameVideoPlane(target, targetEl) {
   const w = target.aspectRatio ? target.aspectRatio.w : FRAME_DEFAULT_W;
@@ -401,7 +426,7 @@ function attachFrameVideoPlane(target, targetEl) {
   plane.setAttribute('src',      `#${target.videoId}`);
   plane.setAttribute('width',    w);
   plane.setAttribute('height',   h);
-  plane.setAttribute('position', '0 0 0.005');
+  plane.setAttribute('position', '0 0 0.002');
   plane.setAttribute('material', 'shader: flat; side: double');
   targetEl.appendChild(plane);
 }

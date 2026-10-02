@@ -51,23 +51,12 @@ export function animateMaterialization(entityContainer, onComplete) {
   // Step 3: Video plane unfolds upward from center
   if (videoPlane) {
     videoPlane.setAttribute('visible', 'true');
-    videoPlane.setAttribute('scale', '0.01 0.01 0.01');
-
-    videoPlane.setAttribute('animation__unfold', {
-      property: 'scale',
-      to: '1 1 1',
-      dur: 700,
-      delay: 450,
-      easing: 'easeOutElastic'
-    });
+    videoPlane.setAttribute('animation__unfold',
+      'property: scale; from: 0.01 0.01 0.01; to: 1 1 1; dur: 500; delay: 250; easing: easeOutCubic'
+    );
   }
 
-  // Feature #3: Holographic scanlines overlay on video plane
-  if (videoPlane) {
-    setTimeout(() => addScanlineOverlay(entityContainer), 500);
-  }
-
-    // Step 4: Beam fades to subtle ambient aura
+  // Step 4: Beam fades to subtle ambient aura
   setTimeout(() => {
     if (beam) {
       beam.setAttribute('animation__settle', {
@@ -91,7 +80,7 @@ export function animateMaterialization(entityContainer, onComplete) {
       ring.setAttribute('scale', '1 1 1');
     }
     if (onComplete) onComplete();
-  }, 900);
+  }, 750);
 }
 
 /* --------------------------------------------------------------------------
