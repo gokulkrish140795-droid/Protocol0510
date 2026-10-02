@@ -51,6 +51,7 @@ export function animateMaterialization(entityContainer, onComplete) {
   // Step 3: Video plane unfolds upward from center
   if (videoPlane) {
     videoPlane.setAttribute('visible', 'true');
+    videoPlane.setAttribute('scale', '0.01 0.01 0.01');
     videoPlane.setAttribute('animation__unfold',
       'property: scale; from: 0.01 0.01 0.01; to: 1 1 1; dur: 500; delay: 250; easing: easeOutCubic'
     );
