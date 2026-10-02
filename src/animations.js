@@ -7,9 +7,9 @@
 export function animateMaterialization(entityContainer, onComplete) {
   if (!entityContainer) return;
 
-  const ring = entityContainer.querySelector('.ar-ring-model');
-  const beam = entityContainer.querySelector('.hologram-beam');
-  const videoPlane = entityContainer.querySelector('.video-screen');
+  const ring      = entityContainer.querySelector('.holo-ring');
+  const beam      = entityContainer.querySelector('.holo-beam');
+  const videoPlane = entityContainer.querySelector('.holo-video');
 
   // Step 1: Base ring landing pulse
   if (ring) {
