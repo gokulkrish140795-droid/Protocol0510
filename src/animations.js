@@ -26,7 +26,7 @@ export function animateMaterialization(entityContainer, onComplete) {
   if (beam) {
     beam.setAttribute('visible', 'true');
     beam.setAttribute('scale', '1 0.01 1');
-    beam.setAttribute('material', 'opacity', 0);
+    beam.setAttribute('material', 'color: #00e5ff; transparent: true; opacity: 0; side: double');
     
     beam.setAttribute('animation__rise', {
       property: 'scale',

@@ -302,18 +302,20 @@ async function startARSession() {
     guidanceBox.textContent = '⚙️ Loading AR tracking targets...';
     arSystem.start();
 
-    // Ensure camera video stream plays and clearColor remains transparent
+    // Ensure MindAR's camera video stream plays (NOT the asset videos).
+    // MindAR injects its own <video> into .mindar-ui-overlay — target that specifically.
     const checkVideo = () => {
-      const videoEl = document.querySelector('#ar-container video') || document.querySelector('video[autoplay]');
-      if (videoEl) {
+      // Try MindAR's overlay video first; fall back to any video with autoplay attribute
+      const videoEl = document.querySelector('.mindar-ui-overlay video')
+                   || document.querySelector('video[autoplay]');
+      if (videoEl && videoEl.paused) {
         videoEl.play().catch(e => console.warn('Camera video play caught:', e));
       }
       if (sceneEl.renderer) {
         sceneEl.renderer.setClearColor(0x000000, 0);
       }
     };
-    setTimeout(checkVideo, 300);
-    setTimeout(checkVideo, 1000);
+    setTimeout(checkVideo, 500);
 
     await arReadyPromise;
 
@@ -423,26 +425,28 @@ function attachFrameVideoPlane(target, targetEl) {
 
   const plane = document.createElement('a-video');
   plane.classList.add('frame-video-plane');
-  plane.setAttribute('src',      `#${target.videoId}`);
+  // CRITICAL: src must be in the material attribute — a separate setAttribute('src') gets
+  // overwritten when material is set later. Include both in one call.
+  plane.setAttribute('material', `shader: flat; src: #${target.videoId}; side: double`);
   plane.setAttribute('width',    w);
   plane.setAttribute('height',   h);
   plane.setAttribute('position', '0 0 0.002');
-  plane.setAttribute('material', 'shader: flat; side: double');
   targetEl.appendChild(plane);
 }
 
 /**
  * Coaster listeners — full state machine, radar, pick/place.
  */
+
 function attachCoasterListeners(target, targetEl) {
   targetEl.addEventListener('targetFound', () => {
     // FIX 3: Ignore if this coaster is already placed in the room
     if (target.placed) return;
     if (currentState !== STATE.SCANNING) return;
 
-    // Pre-buffer video element for fast, instant response
+    // Pre-buffer video element so it's ready to play on first tap
     const vid = document.getElementById(target.videoId);
-    if (vid) vid.load();
+    // Do NOT call vid.load() here — it resets readyState and kills the autoplay permission token
 
     activeTargetIndex = target.index;
     setActiveTarget(targetEl);
@@ -515,7 +519,11 @@ function createHologram3DStructure(targetIndex) {
       `shader: chromakey; src: #${target.videoId}; colorThreshold: 0.35; smoothness: 0.1; rimStrength: 0.25`
     );
   } else {
-    videoPlane.setAttribute('material', 'shader: flat; side: double');
+    // CRITICAL: include src in the same setAttribute call as the shader.
+    // Setting src separately then overwriting with material strips the texture binding.
+    videoPlane.setAttribute('material',
+      `shader: flat; src: #${target.videoId}; side: double`
+    );
   }
 
   container.appendChild(videoPlane);
@@ -576,10 +584,10 @@ function pickUpMemory(targetIndex) {
   if (!container) return;
 
   const target = TARGETS[targetIndex];
-  // Prime video buffer synchronously on this user tap so mobile browser registers playback permission
+  // Register autoplay permission token for this video on the user's tap gesture.
+  // CRITICAL: do NOT call vid.load() — it resets readyState and voids the token.
   const vid = document.getElementById(target.videoId);
   if (vid) {
-    vid.load();
     vid.muted = true;
     const prePlay = vid.play();
     if (prePlay !== undefined) {
