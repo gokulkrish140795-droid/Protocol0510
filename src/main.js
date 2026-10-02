@@ -8,11 +8,11 @@
  * Phase 4: Living Photo Frames — Targets 2–4, isEasterEgg: true, zero coaster UI.
  *
  * 5-TARGET ROSTER (v2 — calibrated 2026-10-02):
- *   Index 0 — COASTER: Birthday Wishes   → dummy.mp4 (swap → montage.mp4 on release)
- *   Index 1 — COASTER: Uncle Memorial    → memorial.mp4  [Chroma Key]
- *   Index 2 — EASTER EGG FRAME #1        → frame1_live.mp4
- *   Index 3 — EASTER EGG FRAME #2        → frame2_live.mp4
- *   Index 4 — EASTER EGG FRAME #3        → frame3_live.mp4
+ *   Index 0 — COASTER: Uncle Memorial    → memorial.mp4  [Chroma Key] (marker1.jpg)
+ *   Index 1 — COASTER: Birthday Wishes   → dummy.mp4 (swap → montage.mp4 on release) (marker0.jpg)
+ *   Index 2 — EASTER EGG FRAME: Wedding  → frame1_live.mp4 (marker2.jpg: 15.5cm x 11.0cm, ratio 1.409)
+ *   Index 3 — EASTER EGG FRAME: River    → frame2_live.mp4 (marker3.jpg: 16.5cm x 11.5cm, ratio 1.435)
+ *   Index 4 — EASTER EGG FRAME: A2 Stage → frame3_live.mp4 (marker4.jpg: 59.4cm x 42.0cm, ratio 1.414)
  */
 
 // Phase 3: chromakey.js must register AFRAME.registerShader('chromakey') before
@@ -58,17 +58,29 @@ let floorReticle = null;
 //  shader: 'chromakey'→ custom GLSL material registered by chromakey.js.
 //  aspectRatio        → { w, h } for frame <a-video>. null = use defaults below.
 //
-//  Frame defaults: portrait 3:4 (standard 4×6 photo frame)
-//    width  = FRAME_DEFAULT_W = 1.2
-//    height = FRAME_DEFAULT_H = 1.6
+//  Frame defaults: portrait ISO ratio (1.0 x 1.414)
+//    width  = FRAME_DEFAULT_W = 1.0
+//    height = FRAME_DEFAULT_H = 1.414
 //
-const FRAME_DEFAULT_W = 1.2;
-const FRAME_DEFAULT_H = 1.6;
+const FRAME_DEFAULT_W = 1.0;
+const FRAME_DEFAULT_H = 1.414;
 
 const TARGETS = [
   // ── COASTERS (Scavenger Hunt) ─────────────────────────────────────────────
+  // Target 0: Uncle Memorial (marker1.jpg in targets.mind)
   {
     index:       0,
+    title:       'Uncle Memorial',
+    videoId:     'video-memorial',
+    emoji:       '🕊️',
+    shader:      'chromakey',   // Phase 3 — GLSL green despill + fresnel rim glow
+    isEasterEgg: false,
+    discovered:  false,
+    placed:      false,
+  },
+  // Target 1: Birthday Wishes (marker0.jpg in targets.mind)
+  {
+    index:       1,
     title:       'Birthday Wishes',
     // TESTING CONTRACT: videoId points to dummy.mp4 for current mobile testing.
     // PRODUCTION SWAP: change videoId to 'video-montage' src in index.html
@@ -80,39 +92,32 @@ const TARGETS = [
     discovered:  false,
     placed:      false,
   },
-  {
-    index:       1,
-    title:       'Uncle Memorial',
-    videoId:     'video-memorial',
-    emoji:       '🕊️',
-    shader:      'chromakey',   // Phase 3 — GLSL green despill + fresnel rim glow
-    isEasterEgg: false,
-    discovered:  false,
-    placed:      false,
-  },
 
   // ── LIVING PHOTO FRAMES (Silent Easter Eggs) ──────────────────────────────
-  // aspectRatio: null → FRAME_DEFAULT_W / FRAME_DEFAULT_H until Director confirms.
+  // Calibrated with physical frame measurements provided by user:
+  // Target 2: Wedding Photo Frame (marker2.jpg: Length 15.5cm, Breadth 11.0cm -> ratio 1.409)
   {
     index:       2,
-    title:       'Living Frame 1',
+    title:       'Living Frame (Wedding)',
     videoId:     'video-frame1',
     isEasterEgg: true,
-    aspectRatio: null,
+    aspectRatio: { w: 1.0, h: 1.409 },
   },
+  // Target 3: River Photo Frame (marker3.jpg: Length 16.5cm, Breadth 11.5cm -> ratio 1.435)
   {
     index:       3,
-    title:       'Living Frame 2',
+    title:       'Living Frame (River)',
     videoId:     'video-frame2',
     isEasterEgg: true,
-    aspectRatio: null,
+    aspectRatio: { w: 1.0, h: 1.435 },
   },
+  // Target 4: A2 Stage Photo Frame (marker4.jpg: Standard A2 59.4cm x 42.0cm -> ratio 1.414)
   {
     index:       4,
-    title:       'Living Frame 3',
+    title:       'Living Frame (A2 Stage)',
     videoId:     'video-frame3',
     isEasterEgg: true,
-    aspectRatio: null,
+    aspectRatio: { w: 1.0, h: 1.414 },
   },
 ];
 
@@ -364,8 +369,14 @@ function attachEasterEggListeners(target, targetEl) {
     vid.muted = anyCoasterPlaying;
 
     // Inject flush planar video overlay on first detection
-    if (!targetEl.querySelector('.frame-video-plane')) {
+    let plane = targetEl.querySelector('.frame-video-plane');
+    if (!plane) {
       attachFrameVideoPlane(target, targetEl);
+    } else {
+      const w = target.aspectRatio ? target.aspectRatio.w : FRAME_DEFAULT_W;
+      const h = target.aspectRatio ? target.aspectRatio.h : FRAME_DEFAULT_H;
+      plane.setAttribute('width',  w);
+      plane.setAttribute('height', h);
     }
 
     vid.play().catch(e => console.warn(`Frame ${target.index} play blocked:`, e));
@@ -379,7 +390,7 @@ function attachEasterEggListeners(target, targetEl) {
 
 /**
  * Phase 4: Builds the flush planar <a-video> inside an Easter Egg target entity.
- * Sits at position 0 0 0 on the marker plane — 1:1 flush overlay.
+ * Sits at position 0 0 0.005 on the marker plane — 1:1 flush overlay without clipping.
  */
 function attachFrameVideoPlane(target, targetEl) {
   const w = target.aspectRatio ? target.aspectRatio.w : FRAME_DEFAULT_W;
@@ -390,7 +401,7 @@ function attachFrameVideoPlane(target, targetEl) {
   plane.setAttribute('src',      `#${target.videoId}`);
   plane.setAttribute('width',    w);
   plane.setAttribute('height',   h);
-  plane.setAttribute('position', '0 0 0');
+  plane.setAttribute('position', '0 0 0.005');
   plane.setAttribute('material', 'shader: flat; side: double');
   targetEl.appendChild(plane);
 }
@@ -400,7 +411,13 @@ function attachFrameVideoPlane(target, targetEl) {
  */
 function attachCoasterListeners(target, targetEl) {
   targetEl.addEventListener('targetFound', () => {
+    // FIX 3: Ignore if this coaster is already placed in the room
+    if (target.placed) return;
     if (currentState !== STATE.SCANNING) return;
+
+    // Pre-buffer video element for fast, instant response
+    const vid = document.getElementById(target.videoId);
+    if (vid) vid.load();
 
     activeTargetIndex = target.index;
     setActiveTarget(targetEl);
@@ -416,6 +433,7 @@ function attachCoasterListeners(target, targetEl) {
   });
 
   targetEl.addEventListener('targetLost', () => {
+    if (target.placed) return;
     if (currentState === STATE.TARGET_FOUND && activeTargetIndex === target.index) {
       const existingRing = targetEl.querySelector('.hologram-container');
       if (existingRing) existingRing.remove();
@@ -458,19 +476,18 @@ function createHologram3DStructure(targetIndex) {
   beam.setAttribute('visible',  'false');
   container.appendChild(beam);
 
-  // 3. Video Plane
-  // Phase 3: Target 1 (chromakey) gets custom GLSL shader; others use flat.
+  // 3. Video Plane (Portrait 9:16)
   const videoPlane = document.createElement('a-video');
   videoPlane.classList.add('video-screen');
   videoPlane.setAttribute('src',      `#${target.videoId}`);
-  videoPlane.setAttribute('width',    '1.6');
-  videoPlane.setAttribute('height',   '0.9');
-  videoPlane.setAttribute('position', '0 0.9 0');
+  videoPlane.setAttribute('width',    '0.9');
+  videoPlane.setAttribute('height',   '1.6');
+  videoPlane.setAttribute('position', '0 0.8 0');
   videoPlane.setAttribute('visible',  'false');
 
   if (target.shader === 'chromakey') {
     videoPlane.setAttribute('material',
-      `shader: chromakey; src: #${target.videoId}; colorThreshold: 0.4; smoothness: 0.08; rimStrength: 0.35`
+      `shader: chromakey; src: #${target.videoId}; colorThreshold: 0.35; smoothness: 0.1; rimStrength: 0.25`
     );
   } else {
     videoPlane.setAttribute('material', 'shader: flat; side: double');
@@ -533,6 +550,21 @@ function pickUpMemory(targetIndex) {
   const container = targetEl ? targetEl.querySelector('.hologram-container') : null;
   if (!container) return;
 
+  const target = TARGETS[targetIndex];
+  // Prime video buffer synchronously on this user tap so mobile browser registers playback permission
+  const vid = document.getElementById(target.videoId);
+  if (vid) {
+    vid.load();
+    vid.muted = true;
+    const prePlay = vid.play();
+    if (prePlay !== undefined) {
+      prePlay.then(() => {
+        vid.pause();
+        vid.currentTime = 0;
+      }).catch(() => {});
+    }
+  }
+
   playPickUp();
   startCarryingHum();
   setRadarActive(false);
@@ -550,8 +582,8 @@ function pickUpMemory(targetIndex) {
   const localPos = worldPos.sub(cameraWorldPos).applyQuaternion(cameraWorldQuat.invert());
   container.object3D.position.copy(localPos);
 
-  lerpEntity(container, { x: 0, y: -0.35, z: -1.4 }, 400, () => {
-    container.setAttribute('rotation', '20 0 0');
+  lerpEntity(container, { x: 0, y: -0.35, z: -1.2 }, 400, () => {
+    container.setAttribute('rotation', '15 0 0');
   });
 
   if (floorReticle) floorReticle.setAttribute('visible', 'true');
@@ -564,32 +596,62 @@ function pickUpMemory(targetIndex) {
 function dropMemoryOnFloor() {
   if (!currentCarriedEntity) return;
 
+  const targetIdx = parseInt(currentCarriedEntity.dataset.targetIndex, 10);
+  const target    = TARGETS[targetIdx];
+  const video     = document.getElementById(target.videoId);
+
   playDropBeam();
   stopCarryingHum();
   if (floorReticle) floorReticle.setAttribute('visible', 'false');
 
-  const worldPos = new THREE.Vector3();
-  currentCarriedEntity.object3D.getWorldPosition(worldPos);
+  // Mute any active Easter Egg frame videos while coaster plays
+  EASTER_EGG_TARGETS.forEach(et => {
+    const fv = document.getElementById(et.videoId);
+    if (fv && !fv.paused) fv.muted = true;
+  });
+
+  // CRITICAL FIX 1: Play video IMMEDIATELY inside user gesture tap handler!
+  if (video) {
+    video.currentTime = 0;
+    video.muted = false;
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(err => {
+        console.warn('Unmuted autoplay restricted, attempting muted playback:', err);
+        video.muted = true;
+        video.play().catch(e => console.error('Video playback completely failed:', e));
+      });
+    }
+  }
+
+  // CRITICAL FIX 3: Dedicated side-by-side floor positions for Target 0 (-0.45) & Target 1 (+0.45)
+  // Ensures both holograms stand side-by-side in your room without occluding each other!
+  const slotX = targetIdx === 0 ? -0.45 : 0.45;
+  const targetFloorPos = { x: slotX, y: -0.4, z: -1.3 };
 
   worldRootEl.appendChild(currentCarriedEntity);
-  currentCarriedEntity.object3D.position.copy(worldPos);
+  currentCarriedEntity.object3D.position.set(slotX, 0, -1.3);
   currentCarriedEntity.setAttribute('rotation', '0 0 0');
 
-  const floorY    = Math.min(worldPos.y, -0.6);
-  const targetIdx = parseInt(currentCarriedEntity.dataset.targetIndex, 10);
-  placedEntities[targetIdx] = currentCarriedEntity;
+  // Guarantee 3D components are visible and scaled properly
+  const ring       = currentCarriedEntity.querySelector('.ar-ring-model');
+  const beam       = currentCarriedEntity.querySelector('.hologram-beam');
+  const videoPlane = currentCarriedEntity.querySelector('.video-screen');
+  if (ring)       ring.setAttribute('visible', 'true');
+  if (beam)       beam.setAttribute('visible', 'true');
+  if (videoPlane) {
+    videoPlane.setAttribute('visible', 'true');
+    videoPlane.setAttribute('scale', '1 1 1');
+  }
 
+  placedEntities[targetIdx] = currentCarriedEntity;
   const entityRef = currentCarriedEntity;
-  lerpEntity(entityRef, { x: worldPos.x, y: floorY, z: worldPos.z }, 400, () => {
+
+  lerpEntity(entityRef, targetFloorPos, 400, () => {
     animateMaterialization(entityRef, () => {
-      const video = document.getElementById(TARGETS[targetIdx].videoId);
-      if (video) {
-        // Audio guard: mute any active Easter Egg frame videos while coaster plays
-        EASTER_EGG_TARGETS.forEach(et => {
-          const fv = document.getElementById(et.videoId);
-          if (fv && !fv.paused) fv.muted = true;
-        });
-        video.play().catch(e => console.warn('Inline play needs tap:', e));
+      // Safety check: ensure video is running
+      if (video && video.paused) {
+        video.play().catch(() => {});
       }
     });
   });
@@ -625,8 +687,8 @@ function rePlaceHologram(targetIndex) {
 
   currentCarriedEntity = existing;
   cameraEl.appendChild(existing);
-  existing.setAttribute('position', '0 -0.35 -1.4');
-  existing.setAttribute('rotation', '20 0 0');
+  existing.setAttribute('position', '0 -0.35 -1.2');
+  existing.setAttribute('rotation', '15 0 0');
 
   if (floorReticle) floorReticle.setAttribute('visible', 'true');
 
@@ -654,32 +716,34 @@ function markTargetDiscovered(targetIndex) {
   emptyProgressMsg.style.display = 'none';
   restartSection.style.display   = 'block';
 
-  // Dynamically create memory card in Saved Progress menu
-  const card = document.createElement('div');
-  card.classList.add('memory-card');
-  card.id = `card-target-${targetIndex}`;
-  card.innerHTML = `
-    <div class="memory-card-header">
-      <div class="memory-thumb">${target.emoji}</div>
-      <div class="memory-info">
-        <h4>${target.title}</h4>
-        <p>✅ Discovered & Placed</p>
+  // Prevent duplicate memory cards in Saved Progress menu
+  if (!progressList.querySelector(`#card-target-${targetIndex}`)) {
+    const card = document.createElement('div');
+    card.classList.add('memory-card');
+    card.id = `card-target-${targetIndex}`;
+    card.innerHTML = `
+      <div class="memory-card-header">
+        <div class="memory-thumb">${target.emoji}</div>
+        <div class="memory-info">
+          <h4>${target.title}</h4>
+          <p>✅ Discovered & Placed</p>
+        </div>
       </div>
-    </div>
-    <div class="card-actions">
-      <button class="btn-small btn-replace interactive" data-target="${targetIndex}">📍 Re-place</button>
-      <button class="btn-small btn-toggle-play interactive" data-target="${targetIndex}">▶ Play/Pause</button>
-    </div>
-  `;
+      <div class="card-actions">
+        <button class="btn-small btn-replace interactive" data-target="${targetIndex}">📍 Re-place</button>
+        <button class="btn-small btn-toggle-play interactive" data-target="${targetIndex}">▶ Play/Pause</button>
+      </div>
+    `;
 
-  card.querySelector('.btn-replace').addEventListener('click', (e) => {
-    rePlaceHologram(parseInt(e.target.dataset.target, 10));
-  });
-  card.querySelector('.btn-toggle-play').addEventListener('click', (e) => {
-    toggleVideoPlayback(parseInt(e.target.dataset.target, 10));
-  });
+    card.querySelector('.btn-replace').addEventListener('click', (e) => {
+      rePlaceHologram(parseInt(e.target.dataset.target, 10));
+    });
+    card.querySelector('.btn-toggle-play').addEventListener('click', (e) => {
+      toggleVideoPlayback(parseInt(e.target.dataset.target, 10));
+    });
 
-  progressList.appendChild(card);
+    progressList.appendChild(card);
+  }
 
   // Feature #5: One ambient drone layer per coaster placed
   const placedCount = COASTER_TARGETS.filter(t => t.placed).length;

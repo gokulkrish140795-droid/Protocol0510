@@ -67,7 +67,7 @@ export function animateMaterialization(entityContainer, onComplete) {
     setTimeout(() => addScanlineOverlay(entityContainer), 500);
   }
 
-  // Step 4: Beam fades to subtle ambient aura
+    // Step 4: Beam fades to subtle ambient aura
   setTimeout(() => {
     if (beam) {
       beam.setAttribute('animation__settle', {
@@ -76,6 +76,19 @@ export function animateMaterialization(entityContainer, onComplete) {
         dur: 600,
         easing: 'easeOutQuad'
       });
+    }
+    // Guarantee video plane, beam and ring are fully visible and at 1 1 1 scale
+    if (videoPlane) {
+      videoPlane.setAttribute('visible', 'true');
+      videoPlane.setAttribute('scale', '1 1 1');
+    }
+    if (beam) {
+      beam.setAttribute('visible', 'true');
+      beam.setAttribute('scale', '1 1 1');
+    }
+    if (ring) {
+      ring.setAttribute('visible', 'true');
+      ring.setAttribute('scale', '1 1 1');
     }
     if (onComplete) onComplete();
   }, 900);
@@ -133,6 +146,10 @@ function spawnBeamParticles(container, count = 10) {
    Canvas-generated horizontal scanline texture overlaid on the video plane
    -------------------------------------------------------------------------- */
 function addScanlineOverlay(container) {
+  const videoPlane = container.querySelector('.video-screen');
+  const w = videoPlane ? parseFloat(videoPlane.getAttribute('width')) || 0.9 : 0.9;
+  const h = videoPlane ? parseFloat(videoPlane.getAttribute('height')) || 1.6 : 1.6;
+
   const canvas = document.createElement('canvas');
   canvas.width = 2;
   canvas.height = 128;
@@ -144,9 +161,9 @@ function addScanlineOverlay(container) {
 
   const scanPlane = document.createElement('a-plane');
   scanPlane.classList.add('scanline-overlay');
-  scanPlane.setAttribute('width', '1.62');
-  scanPlane.setAttribute('height', '0.92');
-  scanPlane.setAttribute('position', '0 0.9 0.005');
+  scanPlane.setAttribute('width', (w * 1.01).toFixed(2));
+  scanPlane.setAttribute('height', (h * 1.01).toFixed(2));
+  scanPlane.setAttribute('position', '0 0.8 0.005');
   scanPlane.setAttribute('material', 'shader: flat; transparent: true; side: double');
 
   scanPlane.addEventListener('loaded', () => {
