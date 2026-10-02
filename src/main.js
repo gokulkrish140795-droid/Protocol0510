@@ -128,7 +128,7 @@ let menuBtn, menuPanel, menuCloseBtn, sfxToggleRow, sfxToggle;
 let progressList, emptyProgressMsg, restartSection, restartBtn;
 let celebrationOverlay, celebrationRestartBtn;
 
-window.addEventListener('DOMContentLoaded', () => {
+function initApp() {
   sceneEl      = document.querySelector('#ar-scene');
   cameraEl     = document.querySelector('#main-camera');
   worldRootEl  = document.querySelector('#world-holograms-root');
@@ -154,11 +154,28 @@ window.addEventListener('DOMContentLoaded', () => {
   initRadar(vignetteEl, cameraEl);
   setupUIEventListeners();
   setupMindAREventListeners();
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 
 /* ─── UI Event Handling ────────────────────────────────────────────────────── */
 function setupUIEventListeners() {
-  mainActionBtn.addEventListener('click', handleMainActionButton);
+  if (mainActionBtn) {
+    mainActionBtn.addEventListener('click', handleMainActionButton);
+  }
+
+  // Also allow tapping guidance prompt on landing screen to start
+  if (guidanceBox) {
+    guidanceBox.addEventListener('click', () => {
+      if (currentState === STATE.UNINITIALIZED) {
+        handleMainActionButton();
+      }
+    });
+  }
 
   menuBtn.addEventListener('click', () => {
     playDrawerTick();
