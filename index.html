@@ -85,19 +85,10 @@
 
     <!--
       ═══════════════════════════════════════════════════════════════════
-      5-TARGET ROSTER (v2 — calibrated 2026-10-02)
+      2-TARGET ROSTER (v3 — living frames removed)
 
-        Index 0 — COASTER: Birthday Wishes   → dummy.mp4 (swap → montage.mp4 on release)
-        Index 1 — COASTER: Uncle Memorial    → memorial.mp4  [Chroma Key Hologram]
-        Index 2 — EASTER EGG FRAME #1        → frame1_live.mp4
-        Index 3 — EASTER EGG FRAME #2        → frame2_live.mp4
-        Index 4 — EASTER EGG FRAME #3        → frame3_live.mp4
-
-      SCALABILITY: To add a new target:
-        1. Add <video> in <a-assets> below
-        2. Add <a-entity mindar-image-target> in <a-scene>
-        3. Add entry to TARGETS array in src/main.js
-        4. Recompile targets.mind via https://hiukim.github.io/mind-ar-js-doc/tools/compile
+        Index 0 — COASTER: Uncle Memorial  → memorial.mp4  [Chroma Key Hologram] (marker1.jpg)
+        Index 1 — COASTER: Birthday Wishes → dummy.mp4 (swap montage.mp4 on release) (marker0.jpg)
       ═══════════════════════════════════════════════════════════════════
     -->
 
@@ -113,22 +104,6 @@
         device-orientation-permission-ui="enabled: false"
       >
       <a-assets timeout="5000">
-        <!-- ── COASTER VIDEO ASSETS (Scavenger Hunt) ─────────────────────── -->
-
-        <!--
-          Target 1 — Birthday Wishes (marker0.jpg)
-          TESTING CONTRACT: src is dummy.mp4 for current mobile testing.
-          PRODUCTION SWAP: change src to ./assets/montage.mp4 before final release.
-        -->
-        <video
-          id="video-montage"
-          src="./assets/dummy.mp4"
-          preload="auto"
-          loop
-          playsinline
-          webkit-playsinline
-          crossorigin="anonymous"
-        ></video>
 
         <!-- Target 0 — Uncle Memorial (Chroma Key Hologram - marker1.jpg) -->
         <video
@@ -141,66 +116,31 @@
           crossorigin="anonymous"
         ></video>
 
-        <!-- ── LIVING PHOTO FRAME VIDEO ASSETS (Silent Easter Eggs) ─────── -->
-
-        <!-- Target 2 — Living Frame: Wedding Photo (marker2.jpg) -->
+        <!--
+          Target 1 — Birthday Wishes (marker0.jpg)
+          PRODUCTION SWAP: change src to ./assets/montage.mp4 before final release.
+        -->
         <video
-          id="video-frame1"
-          src="./assets/frame1_live.mp4"
-          preload="none"
+          id="video-montage"
+          src="./assets/dummy.mp4"
+          preload="auto"
           loop
           playsinline
           webkit-playsinline
           crossorigin="anonymous"
         ></video>
 
-        <!-- Target 3 — Living Frame: River Photo (marker3.jpg) -->
-        <video
-          id="video-frame2"
-          src="./assets/frame2_live.mp4"
-          preload="none"
-          loop
-          playsinline
-          webkit-playsinline
-          crossorigin="anonymous"
-        ></video>
-
-        <!-- Target 4 — Living Frame: A2 Stage Photo (marker4.jpg) -->
-        <video
-          id="video-frame3"
-          src="./assets/frame3_live.mp4"
-          preload="none"
-          loop
-          playsinline
-          webkit-playsinline
-          crossorigin="anonymous"
-        ></video>
       </a-assets>
 
       <!-- Main Camera -->
       <a-camera id="main-camera" position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- ── COASTER TARGETS (Scavenger Hunt) ──────────────────────────── -->
-
-      <!-- Target 0: Uncle Memorial Coaster (Chroma Key Hologram - marker1.jpg) -->
+      <!-- Target 0: Uncle Memorial Coaster (marker1.jpg) -->
       <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
 
       <!-- Target 1: Birthday Wishes Coaster (marker0.jpg) -->
       <a-entity id="target-1" mindar-image-target="targetIndex: 1"></a-entity>
 
-      <!-- ── EASTER EGG FRAME TARGETS (Silent — zero coaster UI) ────────── -->
-
-      <!-- Target 2: Wedding Photo Frame (marker2.jpg) -->
-      <a-entity id="target-2" mindar-image-target="targetIndex: 2"></a-entity>
-
-      <!-- Target 3: River Photo Frame (marker3.jpg) -->
-      <a-entity id="target-3" mindar-image-target="targetIndex: 3"></a-entity>
-
-      <!-- Target 4: A2 Stage Photo Frame (marker4.jpg) -->
-      <a-entity id="target-4" mindar-image-target="targetIndex: 4"></a-entity>
-
-      <!-- Dynamic World Container for Placed Holograms -->
-      <a-entity id="world-holograms-root"></a-entity>
     </a-scene>
   </div>
 

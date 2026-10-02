@@ -1,22 +1,14 @@
 /**
  * AR Scavenger Hunt — Main Game Controller
- * Orchestrates MindAR, iOS WebKit permissions, 3D parenting,
- * Proximity Radar, Audio SFX, and the Menu Panel.
  *
- * Phase 2: Floor Reticle (#2), Carrying Hum (#6), Ambient Drone (#5), LERP (#1).
- * Phase 3: Chroma Key Hologram — shader applied to Target 1 via chromakey.js.
- * Phase 4: Living Photo Frames — Targets 2–4, isEasterEgg: true, zero coaster UI.
+ * 2-TARGET ROSTER (v3 — living frames removed):
+ *   Index 0 — COASTER: Uncle Memorial  → memorial.mp4  [Chroma Key] (marker1.jpg)
+ *   Index 1 — COASTER: Birthday Wishes → dummy.mp4     [Flat]       (marker0.jpg)
  *
- * 5-TARGET ROSTER (v2 — calibrated 2026-10-02):
- *   Index 0 — COASTER: Uncle Memorial    → memorial.mp4  [Chroma Key] (marker1.jpg)
- *   Index 1 — COASTER: Birthday Wishes   → dummy.mp4 (swap → montage.mp4 on release) (marker0.jpg)
- *   Index 2 — EASTER EGG FRAME: Wedding  → frame1_live.mp4 (marker2.jpg: 15.5cm x 11.0cm, ratio 1.409)
- *   Index 3 — EASTER EGG FRAME: River    → frame2_live.mp4 (marker3.jpg: 16.5cm x 11.5cm, ratio 1.435)
- *   Index 4 — EASTER EGG FRAME: A2 Stage → frame3_live.mp4 (marker4.jpg: 59.4cm x 42.0cm, ratio 1.414)
+ * Floor-drop fix: holograms stay parented to cameraEl at a fixed
+ * camera-relative offset. No world-space re-parent = no coordinate corruption.
  */
 
-// Phase 3: chromakey.js must register AFRAME.registerShader('chromakey') before
-// any A-Frame component tries to use material="shader: chromakey".
 import './chromakey.js';
 
 import {
@@ -49,32 +41,18 @@ let activeTargetIndex    = null;
 let currentCarriedEntity = null;
 const placedEntities     = {}; // targetIndex → placed A-Frame entity
 
-// Feature #2: Floor placement reticle
+// Floor placement reticle
 let floorReticle = null;
 
-// ─── TARGETS — Single Source of Truth ────────────────────────────────────────
-//
-//  isEasterEgg: true  → parallel track; zero coaster UI; excluded from celebration.
-//  shader: 'chromakey'→ custom GLSL material registered by chromakey.js.
-//  aspectRatio        → { w, h } for frame <a-video>. null = use defaults below.
-//
-//  Frame defaults: portrait ISO ratio (1.0 x 1.414)
-//    width  = FRAME_DEFAULT_W = 1.0
-//    height = FRAME_DEFAULT_H = 1.414
-//
-const FRAME_DEFAULT_W = 1.0;
-const FRAME_DEFAULT_H = 1.414;
-
+// ─── TARGETS — 2 coasters only ───────────────────────────────────────────────
 const TARGETS = [
-  // ── COASTERS (Scavenger Hunt) ─────────────────────────────────────────────
   // Target 0: Uncle Memorial (marker1.jpg in targets.mind)
   {
     index:       0,
     title:       'Uncle Memorial',
     videoId:     'video-memorial',
     emoji:       '🕊️',
-    shader:      'chromakey',   // Phase 3 — GLSL green despill + fresnel rim glow
-    isEasterEgg: false,
+    shader:      'chromakey',
     discovered:  false,
     placed:      false,
   },
@@ -82,71 +60,34 @@ const TARGETS = [
   {
     index:       1,
     title:       'Birthday Wishes',
-    // TESTING CONTRACT: videoId points to dummy.mp4 for current mobile testing.
-    // PRODUCTION SWAP: change videoId to 'video-montage' src in index.html
-    //                  from ./assets/dummy.mp4 → ./assets/montage.mp4 before release.
     videoId:     'video-montage',
     emoji:       '🎂',
     shader:      'flat',
-    isEasterEgg: false,
     discovered:  false,
     placed:      false,
   },
-
-  // ── LIVING PHOTO FRAMES (Silent Easter Eggs) ──────────────────────────────
-  // Calibrated with exact marker image aspect ratios to fit flush inside frame borders:
-  // Target 2: Wedding Photo Frame (marker2.jpg: 3198x3699 -> ratio 1.157)
-  {
-    index:       2,
-    title:       'Living Frame (Wedding)',
-    videoId:     'video-frame1',
-    isEasterEgg: true,
-    aspectRatio: { w: 1.0, h: 1.157 },
-  },
-  // Target 3: River Photo Frame (marker3.jpg: 3000x4000 -> ratio 1.333, matches frame2_live.mp4 exactly)
-  {
-    index:       3,
-    title:       'Living Frame (River)',
-    videoId:     'video-frame2',
-    isEasterEgg: true,
-    aspectRatio: { w: 1.0, h: 1.333 },
-  },
-  // Target 4: A2 Stage Photo Frame (marker4.jpg: 2732x4096 -> ratio 1.500)
-  {
-    index:       4,
-    title:       'Living Frame (A2 Stage)',
-    videoId:     'video-frame3',
-    isEasterEgg: true,
-    aspectRatio: { w: 1.0, h: 1.500 },
-  },
 ];
 
-// Derived subsets — computed once; never hardcode counts anywhere.
-// Celebration fires when COASTER_TARGETS.every(t => t.placed) — never when frames trigger.
-const COASTER_TARGETS    = TARGETS.filter(t => !t.isEasterEgg); // length: 2
-const EASTER_EGG_TARGETS = TARGETS.filter(t =>  t.isEasterEgg); // length: 3
-
 // ─── DOM Elements ─────────────────────────────────────────────────────────────
-let sceneEl, cameraEl, worldRootEl;
+let sceneEl, cameraEl;
 let mainActionBtn, guidanceBox;
 let menuBtn, menuPanel, menuCloseBtn, sfxToggleRow, sfxToggle;
 let progressList, emptyProgressMsg, restartSection, restartBtn;
 let celebrationOverlay, celebrationRestartBtn;
 
 function initApp() {
-  sceneEl      = document.querySelector('#ar-scene');
-  cameraEl     = document.querySelector('#main-camera');
-  worldRootEl  = document.querySelector('#world-holograms-root');
+  sceneEl   = document.querySelector('#ar-scene');
+  cameraEl  = document.querySelector('#main-camera');
   const vignetteEl = document.querySelector('#radar-vignette');
 
   mainActionBtn = document.querySelector('#main-action-btn');
   guidanceBox   = document.querySelector('#guidance-box');
 
-  menuBtn       = document.querySelector('#menu-btn');
-  menuPanel     = document.querySelector('#menu-panel');
-  menuCloseBtn  = document.querySelector('#menu-close');
-  sfxToggleRow  = document.querySelector('#sfx-toggle-row');
-  sfxToggle     = document.querySelector('#sfx-toggle');
+  menuBtn      = document.querySelector('#menu-btn');
+  menuPanel    = document.querySelector('#menu-panel');
+  menuCloseBtn = document.querySelector('#menu-close');
+  sfxToggleRow = document.querySelector('#sfx-toggle-row');
+  sfxToggle    = document.querySelector('#sfx-toggle');
 
   progressList     = document.querySelector('#progress-list');
   emptyProgressMsg = document.querySelector('#empty-progress-msg');
@@ -167,26 +108,21 @@ if (document.readyState === 'loading') {
   initApp();
 }
 
-/* ─── UI Event Handling ────────────────────────────────────────────────────── */
+/* ─── UI Event Handling ──────────────────────────────────────────────────────── */
 function setupUIEventListeners() {
+  // Action button — handles all state transitions
   if (mainActionBtn) {
-    mainActionBtn.addEventListener('click', handleMainActionButton);
-  }
-
-  // Allow tapping guidance prompt or action button to advance AR states
-  if (guidanceBox) {
-    guidanceBox.addEventListener('click', () => {
+    mainActionBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // prevent bubbling to any container listeners
       handleMainActionButton();
     });
   }
 
-  // Allow tapping anywhere on the viewport / floor while carrying to drop!
-  const arContainer = document.querySelector('#ar-container');
-  if (arContainer) {
-    arContainer.addEventListener('click', (e) => {
-      if (currentState === STATE.CARRYING) {
-        dropMemoryOnFloor();
-      }
+  // Guidance box tap also advances state
+  if (guidanceBox) {
+    guidanceBox.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleMainActionButton();
     });
   }
 
@@ -252,76 +188,42 @@ async function startARSession() {
   mainActionBtn.disabled  = true;
 
   try {
-    // Wait for A-Frame scene to finish loading DOM entities
     if (!sceneEl.hasLoaded) {
       await new Promise(resolve => sceneEl.addEventListener('loaded', resolve, { once: true }));
     }
 
-    // Enforce transparent clearColor on Three.js WebGL renderer
     if (sceneEl.renderer) {
       sceneEl.renderer.setClearColor(0x000000, 0);
     }
 
     const arSystem = sceneEl.systems['mindar-image-system'];
-    if (!arSystem) {
-      throw new Error('MindAR system not found.');
-    }
+    if (!arSystem) throw new Error('MindAR system not found.');
 
-    // Set up promise to wait for MindAR to finish loading camera & compiled targets
     const arReadyPromise = new Promise((resolve, reject) => {
       let resolved = false;
-
-      const onReady = () => {
-        if (resolved) return;
-        resolved = true;
-        sceneEl.removeEventListener('arReady', onReady);
-        sceneEl.removeEventListener('arError', onError);
-        resolve();
-      };
-
-      const onError = (e) => {
-        if (resolved) return;
-        resolved = true;
-        sceneEl.removeEventListener('arReady', onReady);
-        sceneEl.removeEventListener('arError', onError);
-        reject(e?.detail?.error || new Error('Camera access failed'));
-      };
-
+      const onReady = () => { if (!resolved) { resolved = true; resolve(); } };
+      const onError = (e) => { if (!resolved) { resolved = true; reject(e?.detail?.error || new Error('Camera failed')); } };
       sceneEl.addEventListener('arReady', onReady, { once: true });
       sceneEl.addEventListener('arError', onError, { once: true });
-
-      // Safety timeout: transition after 8 seconds if arReady didn't emit but camera started
-      setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          resolve();
-        }
-      }, 8000);
+      // Safety timeout
+      setTimeout(() => { if (!resolved) { resolved = true; resolve(); } }, 8000);
     });
 
     guidanceBox.textContent = '⚙️ Loading AR tracking targets...';
     arSystem.start();
 
-    // Ensure MindAR's camera video stream plays (NOT the asset videos).
-    // MindAR injects its own <video> into .mindar-ui-overlay — target that specifically.
-    const checkVideo = () => {
-      // Try MindAR's overlay video first; fall back to any video with autoplay attribute
-      const videoEl = document.querySelector('.mindar-ui-overlay video')
-                   || document.querySelector('video[autoplay]');
-      if (videoEl && videoEl.paused) {
-        videoEl.play().catch(e => console.warn('Camera video play caught:', e));
-      }
-      if (sceneEl.renderer) {
-        sceneEl.renderer.setClearColor(0x000000, 0);
-      }
-    };
-    setTimeout(checkVideo, 500);
+    // Nudge MindAR's own camera video — do NOT touch asset <video> elements.
+    setTimeout(() => {
+      const camVid = document.querySelector('.mindar-ui-overlay video');
+      if (camVid && camVid.paused) camVid.play().catch(() => {});
+      if (sceneEl.renderer) sceneEl.renderer.setClearColor(0x000000, 0);
+    }, 600);
 
     await arReadyPromise;
 
   } catch (err) {
     console.error('MindAR start error:', err);
-    guidanceBox.textContent = '⚠️ Camera blocked. Please tap the lock icon in the address bar to allow camera access.';
+    guidanceBox.textContent = '⚠️ Camera blocked. Tap the lock icon in the address bar to allow camera access.';
     mainActionBtn.disabled = false;
     mainActionBtn.innerHTML = '<span>🔄 Retry Camera</span>';
     return;
@@ -343,110 +245,20 @@ function enterScanningState() {
   mainActionBtn.classList.add('secondary');
 }
 
-/* ─── MindAR Target Detection Listeners ─────────────────────────────────────── */
+/* ─── MindAR Target Listeners ────────────────────────────────────────────────── */
 function setupMindAREventListeners() {
   TARGETS.forEach(target => {
     const targetEl = document.querySelector(`#target-${target.index}`);
     if (!targetEl) return;
-
-    if (target.isEasterEgg) {
-      // Phase 4: Easter Egg parallel track — fully decoupled from coaster state machine
-      attachEasterEggListeners(target, targetEl);
-    } else {
-      // Coaster scavenger hunt track — full state machine + radar + pick/place
-      attachCoasterListeners(target, targetEl);
-    }
+    attachCoasterListeners(target, targetEl);
   });
 }
-
-/**
- * Phase 4: Easter Egg handler — play/pause only; zero coaster logic runs.
- *
- * Audio guard: if any coaster video is currently playing when the frame is
- * detected, the frame video plays muted. When a coaster video starts playing
- * (in dropMemoryOnFloor), any active frame videos are also muted.
- */
-function attachEasterEggListeners(target, targetEl) {
-  let lostTimeout = null;
-
-  targetEl.addEventListener('targetFound', () => {
-    if (lostTimeout) {
-      clearTimeout(lostTimeout);
-      lostTimeout = null;
-    }
-
-    const vid = document.getElementById(target.videoId);
-    if (!vid) return;
-
-    // Audio guard: check if any coaster is playing
-    const anyCoasterPlaying = COASTER_TARGETS.some(ct => {
-      const v = document.getElementById(ct.videoId);
-      return v && !v.paused;
-    });
-    vid.muted = anyCoasterPlaying;
-
-    // Inject flush planar video overlay on first detection
-    let plane = targetEl.querySelector('.frame-video-plane');
-    if (!plane) {
-      attachFrameVideoPlane(target, targetEl);
-    } else {
-      const w = target.aspectRatio ? target.aspectRatio.w : FRAME_DEFAULT_W;
-      const h = target.aspectRatio ? target.aspectRatio.h : FRAME_DEFAULT_H;
-      plane.setAttribute('width',  w);
-      plane.setAttribute('height', h);
-      plane.setAttribute('visible', 'true');
-    }
-
-    if (vid.paused) {
-      vid.play().catch(e => console.warn(`Frame ${target.index} play blocked:`, e));
-    }
-  });
-
-  targetEl.addEventListener('targetLost', () => {
-    // Debounce targetLost by 1500ms to eliminate stutter and pausing from hand jitter
-    if (lostTimeout) clearTimeout(lostTimeout);
-    lostTimeout = setTimeout(() => {
-      const vid = document.getElementById(target.videoId);
-      if (vid) vid.pause();
-      const plane = targetEl.querySelector('.frame-video-plane');
-      if (plane) plane.setAttribute('visible', 'false');
-      lostTimeout = null;
-    }, 1500);
-  });
-}
-
-/**
- * Phase 4: Builds the flush planar <a-video> inside an Easter Egg target entity.
- * Sits at position 0 0 0.002 on the marker plane — flush overlay without clipping or parallax float.
- */
-function attachFrameVideoPlane(target, targetEl) {
-  const w = target.aspectRatio ? target.aspectRatio.w : FRAME_DEFAULT_W;
-  const h = target.aspectRatio ? target.aspectRatio.h : FRAME_DEFAULT_H;
-
-  const plane = document.createElement('a-video');
-  plane.classList.add('frame-video-plane');
-  // CRITICAL: src must be in the material attribute — a separate setAttribute('src') gets
-  // overwritten when material is set later. Include both in one call.
-  plane.setAttribute('material', `shader: flat; src: #${target.videoId}; side: double`);
-  plane.setAttribute('width',    w);
-  plane.setAttribute('height',   h);
-  plane.setAttribute('position', '0 0 0.002');
-  targetEl.appendChild(plane);
-}
-
-/**
- * Coaster listeners — full state machine, radar, pick/place.
- */
 
 function attachCoasterListeners(target, targetEl) {
   targetEl.addEventListener('targetFound', () => {
-    // FIX 3: Ignore if this coaster is already placed in the room
+    // Ignore if already placed or not in scanning state
     if (target.placed) return;
     if (currentState !== STATE.SCANNING) return;
-
-    // Pre-buffer video element so it's ready to play on first tap
-    const vid = document.getElementById(target.videoId);
-    // Do NOT call vid.load() here — it resets readyState and kills the autoplay permission token
 
     activeTargetIndex = target.index;
     setActiveTarget(targetEl);
@@ -471,7 +283,7 @@ function attachCoasterListeners(target, targetEl) {
   });
 }
 
-/* ─── 3D Ring & Hologram Construction ─────────────────────────────────────── */
+/* ─── 3D Ring & Hologram Construction ───────────────────────────────────────── */
 function attachRingToCoaster(targetIndex, targetElement) {
   const old = targetElement.querySelector('.hologram-container');
   if (old) old.remove();
@@ -495,7 +307,7 @@ function createHologram3DStructure(targetIndex) {
   ring.setAttribute('animation__spin', 'property: rotation; to: 90 360 0; loop: true; dur: 6000; easing: linear');
   container.appendChild(ring);
 
-  // 2. Hologram Light Beam
+  // 2. Hologram Light Beam (hidden until placed on floor)
   const beam = document.createElement('a-cylinder');
   beam.classList.add('hologram-beam');
   beam.setAttribute('radius',   '0.44');
@@ -505,10 +317,9 @@ function createHologram3DStructure(targetIndex) {
   beam.setAttribute('visible',  'false');
   container.appendChild(beam);
 
-  // 3. Video Plane (Portrait 9:16)
+  // 3. Video Plane (Portrait 9:16) — src MUST be inside material, not separate setAttribute
   const videoPlane = document.createElement('a-video');
   videoPlane.classList.add('video-screen');
-  videoPlane.setAttribute('src',      `#${target.videoId}`);
   videoPlane.setAttribute('width',    '0.9');
   videoPlane.setAttribute('height',   '1.6');
   videoPlane.setAttribute('position', '0 0.8 0');
@@ -519,8 +330,7 @@ function createHologram3DStructure(targetIndex) {
       `shader: chromakey; src: #${target.videoId}; colorThreshold: 0.35; smoothness: 0.1; rimStrength: 0.25`
     );
   } else {
-    // CRITICAL: include src in the same setAttribute call as the shader.
-    // Setting src separately then overwriting with material strips the texture binding.
+    // src MUST be in the same setAttribute call — setting it separately gets overwritten
     videoPlane.setAttribute('material',
       `shader: flat; src: #${target.videoId}; side: double`
     );
@@ -530,7 +340,7 @@ function createHologram3DStructure(targetIndex) {
   return container;
 }
 
-/* ─── Feature #2: Floor Placement Reticle ─────────────────────────────────── */
+/* ─── Floor Placement Reticle ───────────────────────────────────────────────── */
 function createFloorReticle() {
   if (floorReticle) return;
   floorReticle = document.createElement('a-ring');
@@ -547,54 +357,21 @@ function createFloorReticle() {
   cameraEl.appendChild(floorReticle);
 }
 
-/* ─── Feature #1: LERP — easeOutBack smooth interpolation ─────────────────── */
-function lerpEntity(entity, targetPos, duration, onComplete) {
-  const startPos  = {
-    x: entity.object3D.position.x,
-    y: entity.object3D.position.y,
-    z: entity.object3D.position.z
-  };
-  const startTime = performance.now();
-
-  function tick(now) {
-    const elapsed = now - startTime;
-    const t       = Math.min(1, elapsed / duration);
-    const c1      = 1.70158;
-    const c3      = c1 + 1;
-    const ease    = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-
-    entity.object3D.position.x = startPos.x + (targetPos.x - startPos.x) * ease;
-    entity.object3D.position.y = startPos.y + (targetPos.y - startPos.y) * ease;
-    entity.object3D.position.z = startPos.z + (targetPos.z - startPos.z) * ease;
-
-    if (t < 1) {
-      requestAnimationFrame(tick);
-    } else {
-      entity.object3D.position.set(targetPos.x, targetPos.y, targetPos.z);
-      if (onComplete) onComplete();
-    }
-  }
-  requestAnimationFrame(tick);
-}
-
-/* ─── Step 3 & 4: Pick & Place Re-Parenting (LERP + Hum + Reticle) ─────────── */
+/* ─── Step 3: Pick Up Memory ────────────────────────────────────────────────── */
 function pickUpMemory(targetIndex) {
   const targetEl  = document.querySelector(`#target-${targetIndex}`);
   const container = targetEl ? targetEl.querySelector('.hologram-container') : null;
   if (!container) return;
 
   const target = TARGETS[targetIndex];
-  // Register autoplay permission token for this video on the user's tap gesture.
-  // CRITICAL: do NOT call vid.load() — it resets readyState and voids the token.
+
+  // Register autoplay permission on this tap gesture (do NOT call vid.load — it voids the token)
   const vid = document.getElementById(target.videoId);
   if (vid) {
     vid.muted = true;
     const prePlay = vid.play();
     if (prePlay !== undefined) {
-      prePlay.then(() => {
-        vid.pause();
-        vid.currentTime = 0;
-      }).catch(() => {});
+      prePlay.then(() => { vid.pause(); vid.currentTime = 0; }).catch(() => {});
     }
   }
 
@@ -602,30 +379,27 @@ function pickUpMemory(targetIndex) {
   startCarryingHum();
   setRadarActive(false);
 
-  const worldPos = new THREE.Vector3();
-  container.object3D.getWorldPosition(worldPos);
-
+  // Re-parent to camera so entity follows phone movement
   currentCarriedEntity = container;
   cameraEl.appendChild(container);
 
-  const cameraWorldPos  = new THREE.Vector3();
-  const cameraWorldQuat = new THREE.Quaternion();
-  cameraEl.object3D.getWorldPosition(cameraWorldPos);
-  cameraEl.object3D.getWorldQuaternion(cameraWorldQuat);
-  const localPos = worldPos.sub(cameraWorldPos).applyQuaternion(cameraWorldQuat.invert());
-  container.object3D.position.copy(localPos);
-
-  lerpEntity(container, { x: 0, y: -0.35, z: -1.2 }, 400, () => {
-    container.setAttribute('rotation', '15 0 0');
-  });
+  // Snap to camera-local position then lerp smoothly to carry position
+  container.setAttribute('position', '0 0 -1.5');
+  container.setAttribute('animation__carry',
+    'property: position; to: 0 -0.35 -1.2; dur: 400; easing: easeOutCubic'
+  );
+  container.setAttribute('animation__tilt',
+    'property: rotation; to: 15 0 0; dur: 400; easing: easeOutCubic'
+  );
 
   if (floorReticle) floorReticle.setAttribute('visible', 'true');
 
   currentState = STATE.CARRYING;
-  guidanceBox.textContent = '🚶 Move & aim at the floor where you want to place it...';
+  guidanceBox.textContent = '🚶 Aim at the floor then tap "Drop"...';
   mainActionBtn.innerHTML = '<span>📍 Tap to "Drop" on Floor</span>';
 }
 
+/* ─── Step 4: Drop Memory on Floor ──────────────────────────────────────────── */
 function dropMemoryOnFloor() {
   if (!currentCarriedEntity) return;
 
@@ -637,61 +411,60 @@ function dropMemoryOnFloor() {
   stopCarryingHum();
   if (floorReticle) floorReticle.setAttribute('visible', 'false');
 
-  // Mute any active Easter Egg frame videos while coaster plays
-  EASTER_EGG_TARGETS.forEach(et => {
-    const fv = document.getElementById(et.videoId);
-    if (fv && !fv.paused) fv.muted = true;
-  });
-
-  // CRITICAL FIX 1: Play video IMMEDIATELY inside user gesture tap handler!
+  // ── VIDEO: play immediately inside this tap gesture handler ──────────────
   if (video) {
     video.currentTime = 0;
     video.muted = false;
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(err => {
-        console.warn('Unmuted autoplay restricted, attempting muted playback:', err);
-        video.muted = true;
-        video.play().catch(e => console.error('Video playback completely failed:', e));
-      });
-    }
+    video.play().catch(() => {
+      // Browser blocked unmuted — fall back to muted so it at least shows
+      video.muted = true;
+      video.play().catch(e => console.error('Video failed completely:', e));
+    });
   }
 
-  // CRITICAL FIX 3: Dedicated side-by-side floor positions for Target 0 (-0.45) & Target 1 (+0.45)
-  // Ensures both holograms stand side-by-side in your room without occluding each other!
-  const slotX = targetIdx === 0 ? -0.45 : 0.45;
-  const targetFloorPos = { x: slotX, y: -0.4, z: -1.3 };
+  // ── POSITION: camera-relative — NO world-space re-parent ─────────────────
+  // Entity stays as cameraEl child. Fixed camera-relative floor offset:
+  //   x: target 0 → left (-0.5), target 1 → right (+0.5)
+  //   y: -0.85 (below camera eye = roughly floor level)
+  //   z: -1.5  (1.5m ahead of phone)
+  const offsetX   = targetIdx === 0 ? -0.5 : 0.5;
+  const floorPos  = `${offsetX} -0.85 -1.5`;
 
-  worldRootEl.appendChild(currentCarriedEntity);
-  currentCarriedEntity.object3D.position.set(slotX, 0, -1.3);
+  // Clear carry animations and snap upright
+  currentCarriedEntity.removeAttribute('animation__carry');
+  currentCarriedEntity.removeAttribute('animation__tilt');
   currentCarriedEntity.setAttribute('rotation', '0 0 0');
 
-  // Guarantee 3D components are visible and scaled properly
-  const ring       = currentCarriedEntity.querySelector('.ar-ring-model');
-  const beam       = currentCarriedEntity.querySelector('.hologram-beam');
-  const videoPlane = currentCarriedEntity.querySelector('.video-screen');
-  if (ring)       ring.setAttribute('visible', 'true');
-  if (beam)       beam.setAttribute('visible', 'true');
-  if (videoPlane) {
-    videoPlane.setAttribute('visible', 'true');
-    videoPlane.setAttribute('scale', '1 1 1');
+  // Animate drop to floor position using A-Frame's built-in animation component
+  currentCarriedEntity.setAttribute('animation__drop',
+    `property: position; to: ${floorPos}; dur: 600; easing: easeOutBack`
+  );
+
+  // Make ring, beam and video plane visible
+  const ring      = currentCarriedEntity.querySelector('.ar-ring-model');
+  const beam      = currentCarriedEntity.querySelector('.hologram-beam');
+  const vidPlane  = currentCarriedEntity.querySelector('.video-screen');
+  if (ring)     ring.setAttribute('visible', 'true');
+  if (beam)     beam.setAttribute('visible', 'true');
+  if (vidPlane) {
+    vidPlane.setAttribute('visible', 'true');
+    vidPlane.setAttribute('scale', '1 1 1');
   }
 
   placedEntities[targetIdx] = currentCarriedEntity;
   const entityRef = currentCarriedEntity;
+  currentCarriedEntity = null; // null BEFORE async — entity is safe in entityRef
 
-  lerpEntity(entityRef, targetFloorPos, 400, () => {
+  // Trigger materialisation beam animation after drop lands (600ms)
+  setTimeout(() => {
     animateMaterialization(entityRef, () => {
-      // Safety check: ensure video is running
-      if (video && video.paused) {
-        video.play().catch(() => {});
-      }
+      // Safety: ensure video is still playing after animation
+      if (video && video.paused) video.play().catch(() => {});
     });
-  });
+  }, 620);
 
   markTargetDiscovered(targetIdx);
-  currentCarriedEntity = null;
-  currentState         = STATE.PLACED;
+  currentState = STATE.PLACED;
 
   guidanceBox.textContent = '🎉 Memory activated! Tap below to search for more.';
   mainActionBtn.innerHTML = '<span>🔍 Search for Next Memory</span>';
@@ -699,7 +472,7 @@ function dropMemoryOnFloor() {
 }
 
 /**
- * Drift Recovery: Re-Pick a placed memory from the Menu
+ * Re-Place: pick up an already-placed hologram from the menu
  */
 function rePlaceHologram(targetIndex) {
   const existing = placedEntities[targetIndex];
@@ -713,22 +486,24 @@ function rePlaceHologram(targetIndex) {
   const video = document.getElementById(TARGETS[targetIndex].videoId);
   if (video) video.pause();
 
-  const beam       = existing.querySelector('.hologram-beam');
-  const videoPlane = existing.querySelector('.video-screen');
-  if (beam)       beam.setAttribute('visible', 'false');
-  if (videoPlane) videoPlane.setAttribute('visible', 'false');
+  const beam     = existing.querySelector('.hologram-beam');
+  const vidPlane = existing.querySelector('.video-screen');
+  if (beam)     beam.setAttribute('visible', 'false');
+  if (vidPlane) vidPlane.setAttribute('visible', 'false');
 
-  currentCarriedEntity = existing;
+  // Re-parent back to camera
+  existing.removeAttribute('animation__drop');
   cameraEl.appendChild(existing);
   existing.setAttribute('position', '0 -0.35 -1.2');
   existing.setAttribute('rotation', '15 0 0');
 
   if (floorReticle) floorReticle.setAttribute('visible', 'true');
 
-  activeTargetIndex = targetIndex;
-  currentState      = STATE.CARRYING;
+  currentCarriedEntity = existing;
+  activeTargetIndex    = targetIndex;
+  currentState         = STATE.CARRYING;
 
-  guidanceBox.textContent = '🚶 Re-positioning memory: Aim at floor and tap Drop...';
+  guidanceBox.textContent = '🚶 Re-positioning: Aim at floor and tap Drop...';
   mainActionBtn.innerHTML = '<span>📍 Tap to "Drop" on Floor</span>';
   mainActionBtn.classList.remove('secondary');
 }
@@ -740,7 +515,7 @@ function toggleVideoPlayback(targetIndex) {
   video.paused ? video.play() : video.pause();
 }
 
-/* ─── Progress Tracking, Menu Updates & Celebration ───────────────────────── */
+/* ─── Progress Tracking, Menu & Celebration ──────────────────────────────────── */
 function markTargetDiscovered(targetIndex) {
   const target      = TARGETS[targetIndex];
   target.discovered = true;
@@ -749,7 +524,6 @@ function markTargetDiscovered(targetIndex) {
   emptyProgressMsg.style.display = 'none';
   restartSection.style.display   = 'block';
 
-  // Prevent duplicate memory cards in Saved Progress menu
   if (!progressList.querySelector(`#card-target-${targetIndex}`)) {
     const card = document.createElement('div');
     card.classList.add('memory-card');
@@ -767,28 +541,21 @@ function markTargetDiscovered(targetIndex) {
         <button class="btn-small btn-toggle-play interactive" data-target="${targetIndex}">▶ Play/Pause</button>
       </div>
     `;
-
     card.querySelector('.btn-replace').addEventListener('click', (e) => {
       rePlaceHologram(parseInt(e.target.dataset.target, 10));
     });
     card.querySelector('.btn-toggle-play').addEventListener('click', (e) => {
       toggleVideoPlayback(parseInt(e.target.dataset.target, 10));
     });
-
     progressList.appendChild(card);
   }
 
-  // Feature #5: One ambient drone layer per coaster placed
-  const placedCount = COASTER_TARGETS.filter(t => t.placed).length;
+  const placedCount = TARGETS.filter(t => t.placed).length;
   startAmbientDrone(placedCount);
 
-  // ── CELEBRATION CHECK ────────────────────────────────────────────────────
-  // Fires ONLY when both coasters are placed.
-  // EASTER_EGG_TARGETS are NEVER counted — this check is coaster-only by design.
-  const allCoastersPlaced = COASTER_TARGETS.every(t => t.placed);
-  if (allCoastersPlaced) {
-    setTimeout(() => triggerCelebration(), 1500);
-  }
+  // Celebration fires when BOTH coasters are placed
+  const allPlaced = TARGETS.every(t => t.placed);
+  if (allPlaced) setTimeout(() => triggerCelebration(), 1500);
 }
 
 function triggerCelebration() {
@@ -804,34 +571,23 @@ function restartScavengerHunt() {
   stopAllAmbient();
   stopCarryingHum();
 
-  // Reset coaster state
-  COASTER_TARGETS.forEach(target => {
+  TARGETS.forEach(target => {
     target.discovered = false;
     target.placed     = false;
     const video = document.getElementById(target.videoId);
-    if (video) {
-      video.pause();
-      video.currentTime = 0;
-    }
+    if (video) { video.pause(); video.currentTime = 0; }
   });
 
-  // Pause Easter Egg frame videos (they resume naturally on next targetFound)
-  EASTER_EGG_TARGETS.forEach(target => {
-    const video = document.getElementById(target.videoId);
-    if (video) video.pause();
-  });
-
-  // Clear dynamically created progress cards
   progressList.querySelectorAll('.memory-card').forEach(card => card.remove());
   emptyProgressMsg.style.display = 'block';
   restartSection.style.display   = 'none';
 
   if (floorReticle) floorReticle.setAttribute('visible', 'false');
 
-  // Clear 3D world holograms
-  while (worldRootEl.firstChild) {
-    worldRootEl.removeChild(worldRootEl.firstChild);
-  }
+  // Remove any placed holograms from camera
+  Object.values(placedEntities).forEach(entity => {
+    if (entity && entity.parentNode) entity.parentNode.removeChild(entity);
+  });
   Object.keys(placedEntities).forEach(k => delete placedEntities[k]);
   currentCarriedEntity = null;
 
