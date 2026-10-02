@@ -61,16 +61,26 @@
 
     <!-- ═══ LAYER 50: Fullscreen Video Player ════════════════════════════════ -->
     <div id="video-overlay" class="overlay hidden">
-      <div class="player-topbar">
-        <button id="player-close" class="player-close-btn" aria-label="Close">✕ Close</button>
-        <div id="player-title" class="player-title-text"></div>
-        <div></div>
-      </div>
+      <!-- Video fills full screen -->
       <video id="player-video" playsinline webkit-playsinline></video>
-      <div class="player-controls">
-        <button id="player-restart" class="player-btn" aria-label="Restart">⟲</button>
-        <button id="player-toggle"  class="player-btn player-btn-big" aria-label="Play/Pause">⏸</button>
-        <div class="player-btn-spacer"></div>
+
+      <!-- Tap area (invisible) — tapping toggles controls visibility -->
+      <div id="player-tap-area" class="player-tap-area"></div>
+
+      <!-- Controls UI — overlaid on video, fades in/out on tap -->
+      <div id="player-ui" class="player-ui">
+        <!-- Transparent top bar -->
+        <div class="player-topbar">
+          <button id="player-close" class="player-close-btn" aria-label="Close">✕ Close</button>
+          <div id="player-title" class="player-title-text"></div>
+          <div class="player-topbar-spacer"></div>
+        </div>
+        <!-- Bottom controls: restart | play/pause | skip+5s -->
+        <div class="player-controls">
+          <button id="player-restart" class="player-btn" aria-label="Restart">↺</button>
+          <button id="player-toggle"  class="player-btn player-btn-big" aria-label="Play/Pause">⏸</button>
+          <button id="player-skip"    class="player-btn" aria-label="Skip 5 seconds">+5s</button>
+        </div>
       </div>
     </div>
 

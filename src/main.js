@@ -99,6 +99,9 @@ function hide(el) { el.classList.add('hidden'); }
 // PIN SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
 function setupPIN() {
+  // Start BGM on the very first touch of the PIN screen (guaranteed user gesture)
+  pinScreen.addEventListener('pointerdown', () => initBGM(), { once: true });
+
   pinBoxes.forEach((box, i) => {
     box.addEventListener('input', e => {
       // Strip non-digits
@@ -121,9 +124,6 @@ function setupPIN() {
 function pinCorrect() {
   pinBoxes.forEach(b => { b.classList.add('correct'); b.disabled = true; });
   pinError.classList.remove('show');
-
-  // Start BGM immediately on correct PIN (user gesture context)
-  initBGM();
 
   setTimeout(() => {
     hide(pinScreen);
@@ -257,21 +257,69 @@ function playSparkles(onDone) {
 // ══════════════════════════════════════════════════════════════════════════════
 // VIDEO PLAYER
 // ══════════════════════════════════════════════════════════════════════════════
+let playerUi, playerTapArea, playerSkip;
+let controlsHideTimer = null;
+
 function setupPlayer() {
+  playerUi      = document.getElementById('player-ui');
+  playerTapArea = document.getElementById('player-tap-area');
+  playerSkip    = document.getElementById('player-skip');
+
+  // Play / Pause toggle
   playerToggle.addEventListener('click', () => {
     playerVideo.paused ? playerVideo.play().catch(()=>{}) : playerVideo.pause();
     updateToggleIcon();
+    keepControlsVisible();
   });
   playerVideo.addEventListener('play',  updateToggleIcon);
   playerVideo.addEventListener('pause', updateToggleIcon);
 
+  // Restart from beginning
   playerRestart.addEventListener('click', () => {
     playerVideo.currentTime = 0;
     playerVideo.play().catch(()=>{});
+    keepControlsVisible();
   });
+
+  // Skip forward 5 seconds
+  playerSkip.addEventListener('click', () => {
+    playerVideo.currentTime = Math.min(playerVideo.currentTime + 5, playerVideo.duration || playerVideo.currentTime + 5);
+    keepControlsVisible();
+  });
+
+  // Tap anywhere on video → toggle controls fade
+  playerTapArea.addEventListener('click', toggleControls);
 
   playerClose.addEventListener('click', closeVideo);
 }
+
+function showControls() {
+  playerUi.classList.remove('hidden-controls');
+  clearTimeout(controlsHideTimer);
+  controlsHideTimer = setTimeout(() => {
+    // Only auto-hide if video is playing
+    if (!playerVideo.paused) playerUi.classList.add('hidden-controls');
+  }, 3000);
+}
+
+function keepControlsVisible() {
+  playerUi.classList.remove('hidden-controls');
+  clearTimeout(controlsHideTimer);
+  controlsHideTimer = setTimeout(() => {
+    if (!playerVideo.paused) playerUi.classList.add('hidden-controls');
+  }, 3000);
+}
+
+function toggleControls() {
+  const hidden = playerUi.classList.contains('hidden-controls');
+  if (hidden) {
+    showControls();
+  } else {
+    clearTimeout(controlsHideTimer);
+    playerUi.classList.add('hidden-controls');
+  }
+}
+
 
 function openVideo(target) {
   const srcEl = document.getElementById(target.videoId);
@@ -292,16 +340,20 @@ function openVideo(target) {
     playerVideo.play().catch(e => console.error('Video play failed:', e));
   });
   updateToggleIcon();
+
+  // Show controls then auto-hide after 3s
+  showControls();
 }
 
 function closeVideo() {
   playerVideo.pause();
   playerVideo.src = '';
+  clearTimeout(controlsHideTimer);
+  playerUi.classList.remove('hidden-controls');
   hide(videoOverlay);
-  resumeBGM(); // Resume BGM when video closed
+  resumeBGM();
   scanGuidance.textContent = '🔍 Point camera at a coaster';
 
-  // Show ending if all collected
   if (TARGETS.every(t => t.collected)) {
     setTimeout(() => showEndingScreen(), 600);
   }

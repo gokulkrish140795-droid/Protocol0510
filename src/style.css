@@ -425,59 +425,96 @@ a-scene {
    ══════════════════════════════════════════════════════════════════════════════ */
 #video-overlay {
   z-index: 50;
-  background: rgba(6, 9, 18, 0.97);
-  flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 0;
+  background: #000;
 }
 
-.player-topbar {
-  position: absolute; top: 0; left: 0; right: 0;
-  height: var(--topbar-h);
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--gold-border);
-  background: rgba(8,12,22,0.95);
+/* Video fills full screen */
+#player-video {
+  position: absolute;
+  inset: 0; width: 100%; height: 100%;
+  object-fit: contain;
+  z-index: 0; display: block;
 }
+
+/* Invisible tap area — above video, below UI controls */
+.player-tap-area {
+  position: absolute; inset: 0;
+  z-index: 1; cursor: pointer;
+}
+
+/* Controls wrapper — covers full screen, flex col, top/bottom layout */
+.player-ui {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; justify-content: space-between;
+  pointer-events: none; /* only children get taps */
+  transition: opacity 0.35s ease;
+}
+.player-ui.hidden-controls { opacity: 0; }
+.player-topbar, .player-controls { pointer-events: auto; }
+
+/* Top bar: transparent gradient, compact height */
+.player-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; height: 48px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, transparent 100%);
+}
+.player-topbar-spacer { width: 80px; flex-shrink: 0; } /* balances close btn for centering title */
+
 .player-close-btn {
-  background: none; border: 1px solid var(--gold-border);
-  color: var(--gold); border-radius: var(--radius-pill);
-  padding: 6px 14px; font-size: 12px; font-weight: 700;
-  letter-spacing: 0.5px; cursor: pointer;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.32);
+  color: rgba(255,255,255,0.88);
+  border-radius: var(--radius-pill);
+  padding: 5px 14px; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.4px; cursor: pointer;
+  white-space: nowrap; flex-shrink: 0;
   transition: background 0.2s;
 }
-.player-close-btn:active { background: rgba(212,168,76,0.15); }
+.player-close-btn:active { background: rgba(255,255,255,0.18); }
+
 .player-title-text {
   font-family: 'Playfair Display', serif;
-  font-size: 15px; font-weight: 700;
-  color: var(--gold-lt); text-align: center;
+  font-size: 14px; font-weight: 700;
+  color: #fff; text-align: center; flex: 1;
+  padding: 0 8px;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-#player-video {
-  width: 94%; max-height: calc(100vh - var(--topbar-h) - 100px);
-  object-fit: contain;
-  border-radius: 12px;
-  border: 1px solid var(--gold-border);
-  display: block;
-  margin-top: var(--topbar-h);
-  box-shadow: 0 0 40px rgba(0,0,0,0.6);
-}
-
+/* Bottom controls: gradient from black → clear, always above safe area */
 .player-controls {
-  display: flex; gap: 22px; margin-top: 22px;
-  align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
+  gap: 28px;
+  padding: 24px 20px;
+  padding-bottom: calc(28px + env(safe-area-inset-bottom, 20px));
+  background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, transparent 100%);
 }
+
 .player-btn {
-  width: 52px; height: 52px; border-radius: 50%;
-  background: var(--bg-card);
-  border: 1px solid var(--gold-border);
-  color: var(--gold-lt); font-size: 22px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  width: 54px; height: 54px; border-radius: 50%;
+  background: rgba(255,255,255,0.14);
+  border: 1.5px solid rgba(255,255,255,0.32);
+  color: #fff; font-size: 22px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
   transition: background 0.18s, transform 0.12s;
+  flex-shrink: 0;
 }
-.player-btn:active { transform: scale(0.88); background: rgba(212,168,76,0.15); }
-.player-btn-big { width: 66px; height: 66px; font-size: 30px; border-color: var(--gold); box-shadow: 0 0 18px var(--gold-glow); }
-.player-btn-spacer { width: 52px; }
+.player-btn:active { transform: scale(0.88); background: rgba(255,255,255,0.28); }
+.player-btn-big {
+  width: 70px; height: 70px; font-size: 32px;
+  border-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.20);
+  box-shadow: 0 0 22px rgba(255,255,255,0.14);
+}
+/* Skip +5s label */
+#player-skip {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.3px;
+}
+
+
 
 /* ══════════════════════════════════════════════════════════════════════════════
    LAYER 55: ENDING SCREEN
