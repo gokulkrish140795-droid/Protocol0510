@@ -73,6 +73,7 @@ function init() {
   playerTitle   = document.getElementById('player-title');
 
   replayBtn = document.getElementById('replay-btn');
+  let homeBtn = document.getElementById('home-btn');
   sceneEl   = document.getElementById('ar-scene');
 
   setupPIN();
@@ -346,13 +347,6 @@ function launchEndingSparkles() {
   }
 }
 
-// Replay memories from ending screen
-if (document.readyState !== 'loading') {
-  document.getElementById('replay-btn')?.addEventListener('click', () => {
-    hide(endingScreen);
-    menuPanel.classList.add('open');
-  });
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MENU
@@ -366,6 +360,42 @@ function setupMenu() {
     hide(endingScreen);
     menuPanel.classList.add('open');
   });
+
+  document.getElementById('home-btn')?.addEventListener('click', goHome);
+}
+
+// Reset the full experience and return to PIN screen
+function goHome() {
+  // Pause / reset video
+  playerVideo.pause();
+  playerVideo.src = '';
+
+  // Pause BGM
+  pauseBGM();
+
+  // Reset target collected state
+  TARGETS.forEach(t => { t.collected = false; });
+
+  // Reset PIN boxes
+  pinBoxes.forEach(b => { b.value = ''; b.disabled = false; b.classList.remove('correct', 'wrong'); });
+  pinError.classList.remove('show');
+
+  // Reset menu list
+  if (menuList) {
+    menuList.querySelectorAll('.menu-card').forEach(c => c.remove());
+    menuEmpty.style.display = '';
+  }
+
+  // Hide all overlays, close menu, show pin screen
+  hide(endingScreen);
+  hide(videoOverlay);
+  hide(vfOverlay);
+  hide(loadingScreen);
+  menuPanel.classList.remove('open');
+  show(pinScreen);
+
+  // Refocus PIN
+  setTimeout(() => pinBoxes[0]?.focus(), 300);
 }
 
 function addToMenu(target) {

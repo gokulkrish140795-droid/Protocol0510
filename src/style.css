@@ -269,6 +269,20 @@ a-scene {
 }
 .cta-btn:active { transform: scale(0.96); box-shadow: 0 2px 14px rgba(212,168,76,0.25); }
 
+/* Ghost secondary button (Back to Home etc.) */
+.ghost-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--gold-border);
+  color: var(--text-dim);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 600; letter-spacing: 0.5px;
+  padding: 13px 20px; border-radius: var(--radius-pill);
+  cursor: pointer; margin-top: 4px;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.ghost-btn:active { border-color: var(--gold); color: var(--gold); background: rgba(212,168,76,0.08); }
+
 /* ── Gold corner accents (exactly like reference) ──────────────────────────────── */
 .corner {
   position: fixed; width: 24px; height: 24px;
