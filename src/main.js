@@ -5,11 +5,18 @@
  *
  * Phase 2: Floor Reticle (#2), Carrying Hum (#6), Ambient Drone (#5), LERP (#1).
  * Phase 3: Chroma Key Hologram — shader applied to Target 1 via chromakey.js.
- * Phase 4: Living Photo Frames — Targets 3–6, isEasterEgg: true, zero coaster UI.
+ * Phase 4: Living Photo Frames — Targets 2–4, isEasterEgg: true, zero coaster UI.
+ *
+ * 5-TARGET ROSTER (v2 — calibrated 2026-10-02):
+ *   Index 0 — COASTER: Birthday Wishes   → dummy.mp4 (swap → montage.mp4 on release)
+ *   Index 1 — COASTER: Uncle Memorial    → memorial.mp4  [Chroma Key]
+ *   Index 2 — EASTER EGG FRAME #1        → frame1_live.mp4
+ *   Index 3 — EASTER EGG FRAME #2        → frame2_live.mp4
+ *   Index 4 — EASTER EGG FRAME #3        → frame3_live.mp4
  */
 
-// Phase 3: Must import BEFORE A-Frame registers components (runs at module eval time).
-// chromakey.js calls AFRAME.registerShader('chromakey', ...) on load.
+// Phase 3: chromakey.js must register AFRAME.registerShader('chromakey') before
+// any A-Frame component tries to use material="shader: chromakey".
 import './chromakey.js';
 
 import {
@@ -37,26 +44,23 @@ const STATE = {
   PLACED:        'PLACED'
 };
 
-let currentState       = STATE.UNINITIALIZED;
-let activeTargetIndex  = null;
+let currentState         = STATE.UNINITIALIZED;
+let activeTargetIndex    = null;
 let currentCarriedEntity = null;
-const placedEntities   = {}; // targetIndex → placed A-Frame entity
+const placedEntities     = {}; // targetIndex → placed A-Frame entity
 
 // Feature #2: Floor placement reticle
 let floorReticle = null;
 
 // ─── TARGETS — Single Source of Truth ────────────────────────────────────────
 //
-//  isEasterEgg: true  → entirely parallel track; zero coaster UI, excluded from
-//                        celebration count.
+//  isEasterEgg: true  → parallel track; zero coaster UI; excluded from celebration.
+//  shader: 'chromakey'→ custom GLSL material registered by chromakey.js.
+//  aspectRatio        → { w, h } for frame <a-video>. null = use defaults below.
 //
-//  shader: 'chromakey' → uses custom GLSL material registered by chromakey.js.
-//                         All other targets use shader: 'flat' (A-Frame default).
-//
-//  aspectRatio: { w, h } → <a-video> dimensions for Easter Egg frames.
-//                           null = use defaults below until Director confirms.
-//
-//  frameDefaults: portrait 3:4 → width 1.2 height 1.6  (standard 4×6 photo frame)
+//  Frame defaults: portrait 3:4 (standard 4×6 photo frame)
+//    width  = FRAME_DEFAULT_W = 1.2
+//    height = FRAME_DEFAULT_H = 1.6
 //
 const FRAME_DEFAULT_W = 1.2;
 const FRAME_DEFAULT_H = 1.6;
@@ -65,7 +69,10 @@ const TARGETS = [
   // ── COASTERS (Scavenger Hunt) ─────────────────────────────────────────────
   {
     index:       0,
-    title:       'Birthday Montage',
+    title:       'Birthday Wishes',
+    // TESTING CONTRACT: videoId points to dummy.mp4 for current mobile testing.
+    // PRODUCTION SWAP: change videoId to 'video-montage' src in index.html
+    //                  from ./assets/dummy.mp4 → ./assets/montage.mp4 before release.
     videoId:     'video-montage',
     emoji:       '🎂',
     shader:      'flat',
@@ -75,60 +82,44 @@ const TARGETS = [
   },
   {
     index:       1,
-    title:       'Special Memorial',
+    title:       'Uncle Memorial',
     videoId:     'video-memorial',
     emoji:       '🕊️',
-    shader:      'chromakey',   // Phase 3 — green despill + fresnel rim glow
+    shader:      'chromakey',   // Phase 3 — GLSL green despill + fresnel rim glow
     isEasterEgg: false,
     discovered:  false,
     placed:      false,
   },
+
+  // ── LIVING PHOTO FRAMES (Silent Easter Eggs) ──────────────────────────────
+  // aspectRatio: null → FRAME_DEFAULT_W / FRAME_DEFAULT_H until Director confirms.
   {
     index:       2,
-    title:       'Third Memory',       // PLACEHOLDER title — update when asset arrives
-    videoId:     'video-coaster3',     // PLACEHOLDER — asset pending from Director
-    emoji:       '⭐',
-    shader:      'flat',
-    isEasterEgg: false,
-    discovered:  false,
-    placed:      false,
-  },
-  // ── LIVING PHOTO FRAMES (Silent Easter Eggs) ──────────────────────────────
-  // aspectRatio: null → will use FRAME_DEFAULT_W / FRAME_DEFAULT_H until
-  //              Director confirms physical frame dimensions.
-  {
-    index:       3,
     title:       'Living Frame 1',
     videoId:     'video-frame1',
     isEasterEgg: true,
-    aspectRatio: null,             // PLACEHOLDER — Director to confirm
+    aspectRatio: null,
   },
   {
-    index:       4,
+    index:       3,
     title:       'Living Frame 2',
     videoId:     'video-frame2',
     isEasterEgg: true,
     aspectRatio: null,
   },
   {
-    index:       5,
+    index:       4,
     title:       'Living Frame 3',
     videoId:     'video-frame3',
     isEasterEgg: true,
     aspectRatio: null,
   },
-  {
-    index:       6,
-    title:       'Living Frame 4',
-    videoId:     'video-frame4',
-    isEasterEgg: true,
-    aspectRatio: null,
-  },
 ];
 
-// Derived subsets — computed once, used throughout (no magic numbers).
-const COASTER_TARGETS    = TARGETS.filter(t => !t.isEasterEgg);
-const EASTER_EGG_TARGETS = TARGETS.filter(t =>  t.isEasterEgg);
+// Derived subsets — computed once; never hardcode counts anywhere.
+// Celebration fires when COASTER_TARGETS.every(t => t.placed) — never when frames trigger.
+const COASTER_TARGETS    = TARGETS.filter(t => !t.isEasterEgg); // length: 2
+const EASTER_EGG_TARGETS = TARGETS.filter(t =>  t.isEasterEgg); // length: 3
 
 // ─── DOM Elements ─────────────────────────────────────────────────────────────
 let sceneEl, cameraEl, worldRootEl;
@@ -152,13 +143,13 @@ window.addEventListener('DOMContentLoaded', () => {
   sfxToggleRow  = document.querySelector('#sfx-toggle-row');
   sfxToggle     = document.querySelector('#sfx-toggle');
 
-  progressList      = document.querySelector('#progress-list');
-  emptyProgressMsg  = document.querySelector('#empty-progress-msg');
-  restartSection    = document.querySelector('#restart-section');
-  restartBtn        = document.querySelector('#restart-btn');
+  progressList     = document.querySelector('#progress-list');
+  emptyProgressMsg = document.querySelector('#empty-progress-msg');
+  restartSection   = document.querySelector('#restart-section');
+  restartBtn       = document.querySelector('#restart-btn');
 
-  celebrationOverlay     = document.querySelector('#celebration-overlay');
-  celebrationRestartBtn  = document.querySelector('#celebration-restart-btn');
+  celebrationOverlay    = document.querySelector('#celebration-overlay');
+  celebrationRestartBtn = document.querySelector('#celebration-restart-btn');
 
   initRadar(vignetteEl, cameraEl);
   setupUIEventListeners();
@@ -227,14 +218,81 @@ async function startARSession() {
     }
   }
 
-  guidanceBox.textContent   = 'Initializing camera...';
-  mainActionBtn.disabled    = true;
+  guidanceBox.textContent = '📹 Requesting camera...';
+  mainActionBtn.disabled  = true;
 
   try {
+    // Wait for A-Frame scene to finish loading DOM entities
+    if (!sceneEl.hasLoaded) {
+      await new Promise(resolve => sceneEl.addEventListener('loaded', resolve, { once: true }));
+    }
+
+    // Enforce transparent clearColor on Three.js WebGL renderer
+    if (sceneEl.renderer) {
+      sceneEl.renderer.setClearColor(0x000000, 0);
+    }
+
     const arSystem = sceneEl.systems['mindar-image-system'];
-    if (arSystem) await arSystem.start();
+    if (!arSystem) {
+      throw new Error('MindAR system not found.');
+    }
+
+    // Set up promise to wait for MindAR to finish loading camera & compiled targets
+    const arReadyPromise = new Promise((resolve, reject) => {
+      let resolved = false;
+
+      const onReady = () => {
+        if (resolved) return;
+        resolved = true;
+        sceneEl.removeEventListener('arReady', onReady);
+        sceneEl.removeEventListener('arError', onError);
+        resolve();
+      };
+
+      const onError = (e) => {
+        if (resolved) return;
+        resolved = true;
+        sceneEl.removeEventListener('arReady', onReady);
+        sceneEl.removeEventListener('arError', onError);
+        reject(e?.detail?.error || new Error('Camera access failed'));
+      };
+
+      sceneEl.addEventListener('arReady', onReady, { once: true });
+      sceneEl.addEventListener('arError', onError, { once: true });
+
+      // Safety timeout: transition after 8 seconds if arReady didn't emit but camera started
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      }, 8000);
+    });
+
+    guidanceBox.textContent = '⚙️ Loading AR tracking targets...';
+    arSystem.start();
+
+    // Ensure camera video stream plays and clearColor remains transparent
+    const checkVideo = () => {
+      const videoEl = document.querySelector('#ar-container video') || document.querySelector('video[autoplay]');
+      if (videoEl) {
+        videoEl.play().catch(e => console.warn('Camera video play caught:', e));
+      }
+      if (sceneEl.renderer) {
+        sceneEl.renderer.setClearColor(0x000000, 0);
+      }
+    };
+    setTimeout(checkVideo, 300);
+    setTimeout(checkVideo, 1000);
+
+    await arReadyPromise;
+
   } catch (err) {
     console.error('MindAR start error:', err);
+    guidanceBox.textContent = '⚠️ Camera blocked. Please tap the lock icon in the address bar to allow camera access.';
+    mainActionBtn.disabled = false;
+    mainActionBtn.innerHTML = '<span>🔄 Retry Camera</span>';
+    return;
   }
 
   mainActionBtn.disabled = false;
@@ -260,32 +318,35 @@ function setupMindAREventListeners() {
     if (!targetEl) return;
 
     if (target.isEasterEgg) {
-      // ── EASTER EGG PARALLEL TRACK ────────────────────────────────────────
-      // Zero coaster logic. targetFound → play; targetLost → pause.
+      // Phase 4: Easter Egg parallel track — fully decoupled from coaster state machine
       attachEasterEggListeners(target, targetEl);
     } else {
-      // ── COASTER SCAVENGER HUNT TRACK ─────────────────────────────────────
+      // Coaster scavenger hunt track — full state machine + radar + pick/place
       attachCoasterListeners(target, targetEl);
     }
   });
 }
 
 /**
- * Phase 4: Easter Egg handler — play/pause video; no state machine involvement.
+ * Phase 4: Easter Egg handler — play/pause only; zero coaster logic runs.
+ *
+ * Audio guard: if any coaster video is currently playing when the frame is
+ * detected, the frame video plays muted. When a coaster video starts playing
+ * (in dropMemoryOnFloor), any active frame videos are also muted.
  */
 function attachEasterEggListeners(target, targetEl) {
   targetEl.addEventListener('targetFound', () => {
     const vid = document.getElementById(target.videoId);
     if (!vid) return;
 
-    // Audio guard: mute frame audio if any coaster video is currently playing
+    // Audio guard: check if any coaster is playing
     const anyCoasterPlaying = COASTER_TARGETS.some(ct => {
       const v = document.getElementById(ct.videoId);
       return v && !v.paused;
     });
     vid.muted = anyCoasterPlaying;
 
-    // Inject planar video overlay flush inside the physical frame if not yet done
+    // Inject flush planar video overlay on first detection
     if (!targetEl.querySelector('.frame-video-plane')) {
       attachFrameVideoPlane(target, targetEl);
     }
@@ -300,8 +361,8 @@ function attachEasterEggListeners(target, targetEl) {
 }
 
 /**
- * Phase 4: Creates the flush planar <a-video> overlay for an Easter Egg frame.
- * Positioned at 0 0 0 on the target entity (1:1 marker-plane overlay).
+ * Phase 4: Builds the flush planar <a-video> inside an Easter Egg target entity.
+ * Sits at position 0 0 0 on the marker plane — 1:1 flush overlay.
  */
 function attachFrameVideoPlane(target, targetEl) {
   const w = target.aspectRatio ? target.aspectRatio.w : FRAME_DEFAULT_W;
@@ -318,7 +379,7 @@ function attachFrameVideoPlane(target, targetEl) {
 }
 
 /**
- * Coaster scavenger hunt listeners — full state machine + radar + pick/place.
+ * Coaster listeners — full state machine, radar, pick/place.
  */
 function attachCoasterListeners(target, targetEl) {
   targetEl.addEventListener('targetFound', () => {
@@ -350,7 +411,6 @@ function attachCoasterListeners(target, targetEl) {
 function attachRingToCoaster(targetIndex, targetElement) {
   const old = targetElement.querySelector('.hologram-container');
   if (old) old.remove();
-
   const container = createHologram3DStructure(targetIndex);
   targetElement.appendChild(container);
 }
@@ -364,14 +424,14 @@ function createHologram3DStructure(targetIndex) {
   // 1. Glowing AR Ring (Torus)
   const ring = document.createElement('a-torus');
   ring.classList.add('ar-ring-model');
-  ring.setAttribute('radius',       '0.45');
-  ring.setAttribute('radius-tubular', '0.025');
-  ring.setAttribute('rotation',     '90 0 0');
-  ring.setAttribute('material',     'color: #00e5ff; emissive: #00e5ff; emissiveIntensity: 0.8; metalness: 0.2; roughness: 0.3');
+  ring.setAttribute('radius',          '0.45');
+  ring.setAttribute('radius-tubular',  '0.025');
+  ring.setAttribute('rotation',        '90 0 0');
+  ring.setAttribute('material',        'color: #00e5ff; emissive: #00e5ff; emissiveIntensity: 0.8; metalness: 0.2; roughness: 0.3');
   ring.setAttribute('animation__spin', 'property: rotation; to: 90 360 0; loop: true; dur: 6000; easing: linear');
   container.appendChild(ring);
 
-  // 2. Hologram Light Beam (Vertical energy cylinder)
+  // 2. Hologram Light Beam
   const beam = document.createElement('a-cylinder');
   beam.classList.add('hologram-beam');
   beam.setAttribute('radius',   '0.44');
@@ -382,22 +442,20 @@ function createHologram3DStructure(targetIndex) {
   container.appendChild(beam);
 
   // 3. Video Plane
-  // Phase 3: Target 1 uses chromakey shader; all others use flat.
+  // Phase 3: Target 1 (chromakey) gets custom GLSL shader; others use flat.
   const videoPlane = document.createElement('a-video');
   videoPlane.classList.add('video-screen');
-  videoPlane.setAttribute('src',    `#${target.videoId}`);
-  videoPlane.setAttribute('width',  '1.6');
-  videoPlane.setAttribute('height', '0.9');
+  videoPlane.setAttribute('src',      `#${target.videoId}`);
+  videoPlane.setAttribute('width',    '1.6');
+  videoPlane.setAttribute('height',   '0.9');
   videoPlane.setAttribute('position', '0 0.9 0');
-  videoPlane.setAttribute('visible', 'false');
+  videoPlane.setAttribute('visible',  'false');
 
   if (target.shader === 'chromakey') {
-    // Chroma Key Hologram — custom GLSL shader from src/chromakey.js
     videoPlane.setAttribute('material',
-      'shader: chromakey; src: #video-memorial; colorThreshold: 0.4; smoothness: 0.08; rimStrength: 0.35'
+      `shader: chromakey; src: #${target.videoId}; colorThreshold: 0.4; smoothness: 0.08; rimStrength: 0.35`
     );
   } else {
-    // Standard flat material for non-hologram coasters
     videoPlane.setAttribute('material', 'shader: flat; side: double');
   }
 
@@ -424,7 +482,7 @@ function createFloorReticle() {
 
 /* ─── Feature #1: LERP — easeOutBack smooth interpolation ─────────────────── */
 function lerpEntity(entity, targetPos, duration, onComplete) {
-  const startPos = {
+  const startPos  = {
     x: entity.object3D.position.x,
     y: entity.object3D.position.y,
     z: entity.object3D.position.z
@@ -452,7 +510,7 @@ function lerpEntity(entity, targetPos, duration, onComplete) {
   requestAnimationFrame(tick);
 }
 
-/* ─── Step 3 & 4: Pick & Place Re-Parenting (with LERP + Hum + Reticle) ───── */
+/* ─── Step 3 & 4: Pick & Place Re-Parenting (LERP + Hum + Reticle) ─────────── */
 function pickUpMemory(targetIndex) {
   const targetEl  = document.querySelector(`#target-${targetIndex}`);
   const container = targetEl ? targetEl.querySelector('.hologram-container') : null;
@@ -509,7 +567,7 @@ function dropMemoryOnFloor() {
     animateMaterialization(entityRef, () => {
       const video = document.getElementById(TARGETS[targetIdx].videoId);
       if (video) {
-        // Audio guard: pause frame videos while coaster video plays
+        // Audio guard: mute any active Easter Egg frame videos while coaster plays
         EASTER_EGG_TARGETS.forEach(et => {
           const fv = document.getElementById(et.videoId);
           if (fv && !fv.paused) fv.muted = true;
@@ -543,7 +601,7 @@ function rePlaceHologram(targetIndex) {
   const video = document.getElementById(TARGETS[targetIndex].videoId);
   if (video) video.pause();
 
-  const beam      = existing.querySelector('.hologram-beam');
+  const beam       = existing.querySelector('.hologram-beam');
   const videoPlane = existing.querySelector('.video-screen');
   if (beam)       beam.setAttribute('visible', 'false');
   if (videoPlane) videoPlane.setAttribute('visible', 'false');
@@ -570,14 +628,14 @@ function toggleVideoPlayback(targetIndex) {
   video.paused ? video.play() : video.pause();
 }
 
-/* ─── Progress Tracking, Menu Updates, & Celebration ──────────────────────── */
+/* ─── Progress Tracking, Menu Updates & Celebration ───────────────────────── */
 function markTargetDiscovered(targetIndex) {
-  const target     = TARGETS[targetIndex];
+  const target      = TARGETS[targetIndex];
   target.discovered = true;
   target.placed     = true;
 
-  emptyProgressMsg.style.display  = 'none';
-  restartSection.style.display    = 'block';
+  emptyProgressMsg.style.display = 'none';
+  restartSection.style.display   = 'block';
 
   // Dynamically create memory card in Saved Progress menu
   const card = document.createElement('div');
@@ -606,11 +664,13 @@ function markTargetDiscovered(targetIndex) {
 
   progressList.appendChild(card);
 
-  // Feature #5: Ambient drone layer — one layer per coaster placed
+  // Feature #5: One ambient drone layer per coaster placed
   const placedCount = COASTER_TARGETS.filter(t => t.placed).length;
   startAmbientDrone(placedCount);
 
-  // Celebration check: ALL coasters placed (Easter eggs excluded — NEVER counted)
+  // ── CELEBRATION CHECK ────────────────────────────────────────────────────
+  // Fires ONLY when both coasters are placed.
+  // EASTER_EGG_TARGETS are NEVER counted — this check is coaster-only by design.
   const allCoastersPlaced = COASTER_TARGETS.every(t => t.placed);
   if (allCoastersPlaced) {
     setTimeout(() => triggerCelebration(), 1500);
@@ -630,7 +690,7 @@ function restartScavengerHunt() {
   stopAllAmbient();
   stopCarryingHum();
 
-  // Reset all coaster target state
+  // Reset coaster state
   COASTER_TARGETS.forEach(target => {
     target.discovered = false;
     target.placed     = false;
@@ -641,7 +701,7 @@ function restartScavengerHunt() {
     }
   });
 
-  // Pause any active Easter Egg frame videos (they resume on next targetFound)
+  // Pause Easter Egg frame videos (they resume naturally on next targetFound)
   EASTER_EGG_TARGETS.forEach(target => {
     const video = document.getElementById(target.videoId);
     if (video) video.pause();
