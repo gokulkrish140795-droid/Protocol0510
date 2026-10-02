@@ -11,95 +11,59 @@
   </head>
   <body>
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         SCREEN 1: PIN ENTRY
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <div id="pin-screen" class="screen active">
-      <div class="gold-border-frame">
-        <div class="pin-content">
-          <div class="protocol-badge">✦ PROTOCOL 0510 ✦</div>
-          <h1 class="pin-title">Mission Complete</h1>
-          <p class="pin-subtitle">
-            The stray heart has been found.<br>
-            A special visitor from heaven is awaiting your arrival.<br><br>
-            <em>Enter the code to enter.</em>
-          </p>
-          <div class="pin-boxes" id="pin-boxes">
-            <input type="tel" maxlength="1" class="pin-digit" data-index="0" autocomplete="off" inputmode="numeric" />
-            <input type="tel" maxlength="1" class="pin-digit" data-index="1" autocomplete="off" inputmode="numeric" />
-            <input type="tel" maxlength="1" class="pin-digit" data-index="2" autocomplete="off" inputmode="numeric" />
-            <input type="tel" maxlength="1" class="pin-digit" data-index="3" autocomplete="off" inputmode="numeric" />
-          </div>
-          <div class="pin-error" id="pin-error">Incorrect code. Try again.</div>
-        </div>
-      </div>
-    </div>
+    <!--
+      LAYER ARCHITECTURE (z-index, bottom to top):
+        0  — #ar-container   (AR camera + MindAR canvas — ALWAYS in DOM, always visible)
+        10 — #vf-overlay     (gold border rail + sparkles + guidance + menu btn — over camera)
+        50 — #video-overlay  (fullscreen video player)
+        60 — #menu-panel     (slide-out collected videos)
+        90 — #loading-screen (initiation animation — dismisses to reveal camera)
+       100 — #pin-screen     (PIN entry — topmost)
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         SCREEN 2: LOADING / INITIATING
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <div id="loading-screen" class="screen">
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <h2 class="loading-text">Initiating Protocol 0510...</h2>
-        <p class="loading-sub">Preparing your experience</p>
-      </div>
-    </div>
+      The AR canvas is NEVER hidden. Only overlays go on top.
+    -->
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         SCREEN 3: AR VIEWFINDER (with gold border rail)
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <div id="ar-screen" class="screen">
-      <!-- Gold border rail overlay -->
-      <div class="viewfinder-border"></div>
-
-      <!-- Menu button (top right) -->
-      <button id="menu-btn" class="vf-menu-btn">☰</button>
-
-      <!-- Scanning guidance -->
-      <div id="scan-guidance" class="scan-guidance">🔍 Point camera at a coaster</div>
-
-      <!-- Sparkle container (shows on detection) -->
-      <div id="sparkle-container" class="sparkle-container"></div>
-
-      <!-- AR scene -->
-      <div id="ar-container">
-        <a-scene
-          id="ar-scene"
-          mindar-image="imageTargetSrc: ./assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no;"
-          embedded
-          color-space="sRGB"
-          renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"
-          vr-mode-ui="enabled: false"
-          device-orientation-permission-ui="enabled: false"
-        >
+    <!-- ── BASE: AR Camera (always present) ──────────────────────────────── -->
+    <div id="ar-container">
+      <a-scene
+        id="ar-scene"
+        mindar-image="imageTargetSrc: ./assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no;"
+        embedded
+        color-space="sRGB"
+        renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"
+        vr-mode-ui="enabled: false"
+        device-orientation-permission-ui="enabled: false"
+      >
         <a-assets timeout="10000">
           <video id="video-memorial" src="./assets/memorial.mp4" preload="auto" loop playsinline webkit-playsinline crossorigin="anonymous"></video>
-          <video id="video-montage" src="./assets/dummy.mp4" preload="auto" loop playsinline webkit-playsinline crossorigin="anonymous"></video>
+          <video id="video-montage"  src="./assets/dummy.mp4"    preload="auto" loop playsinline webkit-playsinline crossorigin="anonymous"></video>
         </a-assets>
         <a-camera id="main-camera" position="0 0 0" look-controls="enabled: false"></a-camera>
         <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
         <a-entity id="target-1" mindar-image-target="targetIndex: 1"></a-entity>
-        </a-scene>
-      </div>
+      </a-scene>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         VIDEO OVERLAY (fullscreen player)
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <div id="video-overlay" class="screen">
+    <!-- ── LAYER 10: Viewfinder UI (visible once AR running) ─────────────── -->
+    <div id="vf-overlay" class="overlay hidden">
+      <div class="viewfinder-border"></div>
+      <button id="menu-btn" class="vf-menu-btn">☰</button>
+      <div id="scan-guidance" class="scan-guidance">🔍 Point camera at a coaster</div>
+      <div id="sparkle-container" class="sparkle-container"></div>
+    </div>
+
+    <!-- ── LAYER 50: Fullscreen Video Player ─────────────────────────────── -->
+    <div id="video-overlay" class="overlay hidden">
+      <div class="player-title" id="player-title"></div>
       <video id="player-video" playsinline webkit-playsinline></video>
       <div class="player-controls">
         <button id="player-restart" class="player-btn" title="Restart">⟲</button>
-        <button id="player-toggle" class="player-btn player-btn-big" title="Play/Pause">⏸</button>
-        <button id="player-close" class="player-btn" title="Close">✕</button>
+        <button id="player-toggle"  class="player-btn player-btn-big" title="Play/Pause">⏸</button>
+        <button id="player-close"   class="player-btn" title="Close">✕</button>
       </div>
-      <div class="player-title" id="player-title"></div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         MENU PANEL (collected videos)
-         ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- ── LAYER 60: Menu Panel ───────────────────────────────────────────── -->
     <div id="menu-panel" class="menu-panel">
       <div class="menu-header">
         <span class="menu-title-text">✦ Collected Memories</span>
@@ -107,6 +71,35 @@
       </div>
       <div id="menu-list" class="menu-list">
         <p class="menu-empty" id="menu-empty">No memories collected yet.<br>Scan a coaster to begin.</p>
+      </div>
+    </div>
+
+    <!-- ── LAYER 90: Loading Screen ───────────────────────────────────────── -->
+    <div id="loading-screen" class="overlay hidden">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <h2 class="loading-text">Initiating Protocol 0510...</h2>
+        <p class="loading-sub">Preparing your experience</p>
+      </div>
+    </div>
+
+    <!-- ── LAYER 100: PIN Screen (topmost) ────────────────────────────────── -->
+    <div id="pin-screen" class="overlay">
+      <div class="gold-border-frame">
+        <div class="protocol-badge">✦ PROTOCOL 0510 ✦</div>
+        <h1 class="pin-title">Mission Complete</h1>
+        <p class="pin-subtitle">
+          The stray heart has been found.<br>
+          A special visitor from heaven is awaiting your arrival.<br><br>
+          <em>Enter the code to enter.</em>
+        </p>
+        <div class="pin-boxes">
+          <input type="tel" maxlength="1" class="pin-digit" data-index="0" autocomplete="off" inputmode="numeric" />
+          <input type="tel" maxlength="1" class="pin-digit" data-index="1" autocomplete="off" inputmode="numeric" />
+          <input type="tel" maxlength="1" class="pin-digit" data-index="2" autocomplete="off" inputmode="numeric" />
+          <input type="tel" maxlength="1" class="pin-digit" data-index="3" autocomplete="off" inputmode="numeric" />
+        </div>
+        <div class="pin-error" id="pin-error">Incorrect code. Try again.</div>
       </div>
     </div>
 

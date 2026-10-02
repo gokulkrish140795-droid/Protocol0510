@@ -1,8 +1,10 @@
 /**
- * Protocol 0510 — Main Controller v6
+ * Protocol 0510 — v7
  *
- * Flow: PIN → Loading → AR Viewfinder → Scan → Sparkles → Fullscreen Video
- * Collected videos saved in menu for later replay.
+ * Architecture: AR canvas is always the base layer (never hidden).
+ * Overlays sit on top. MindAR can initialize at full dimensions immediately.
+ *
+ * Flow: PIN → Loading (AR starts here) → VF overlay reveals → Scan → Sparkles → Video
  */
 
 const TARGETS = [
@@ -12,32 +14,31 @@ const TARGETS = [
 
 const CORRECT_PIN = '0510';
 
-// ─── DOM refs (set in init) ───────────────────────────────────────────────────
-let pinScreen, loadingScreen, arScreen, videoOverlay;
+// ─── DOM refs ─────────────────────────────────────────────────────────────────
+let pinScreen, loadingScreen, vfOverlay, videoOverlay;
 let pinBoxes, pinError;
 let scanGuidance, sparkleContainer;
 let menuBtn, menuPanel, menuClose, menuList, menuEmpty;
 let playerVideo, playerToggle, playerRestart, playerClose, playerTitle;
 let sceneEl;
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
 function init() {
-  pinScreen      = document.getElementById('pin-screen');
-  loadingScreen  = document.getElementById('loading-screen');
-  arScreen       = document.getElementById('ar-screen');
-  videoOverlay   = document.getElementById('video-overlay');
+  pinScreen     = document.getElementById('pin-screen');
+  loadingScreen = document.getElementById('loading-screen');
+  vfOverlay     = document.getElementById('vf-overlay');
+  videoOverlay  = document.getElementById('video-overlay');
 
-  pinBoxes       = document.querySelectorAll('.pin-digit');
-  pinError       = document.getElementById('pin-error');
+  pinBoxes  = document.querySelectorAll('.pin-digit');
+  pinError  = document.getElementById('pin-error');
 
-  scanGuidance      = document.getElementById('scan-guidance');
-  sparkleContainer  = document.getElementById('sparkle-container');
+  scanGuidance     = document.getElementById('scan-guidance');
+  sparkleContainer = document.getElementById('sparkle-container');
 
-  menuBtn    = document.getElementById('menu-btn');
-  menuPanel  = document.getElementById('menu-panel');
-  menuClose  = document.getElementById('menu-close');
-  menuList   = document.getElementById('menu-list');
-  menuEmpty  = document.getElementById('menu-empty');
+  menuBtn   = document.getElementById('menu-btn');
+  menuPanel = document.getElementById('menu-panel');
+  menuClose = document.getElementById('menu-close');
+  menuList  = document.getElementById('menu-list');
+  menuEmpty = document.getElementById('menu-empty');
 
   playerVideo   = document.getElementById('player-video');
   playerToggle  = document.getElementById('player-toggle');
@@ -47,9 +48,12 @@ function init() {
 
   sceneEl = document.getElementById('ar-scene');
 
-  setupPinInput();
-  setupPlayerControls();
+  setupPIN();
+  setupPlayer();
   setupMenu();
+
+  // Auto-focus first PIN box
+  setTimeout(() => pinBoxes[0]?.focus(), 400);
 }
 
 if (document.readyState === 'loading') {
@@ -58,102 +62,104 @@ if (document.readyState === 'loading') {
   init();
 }
 
+// ─── Helper: show / hide overlay ─────────────────────────────────────────────
+function show(el) { el.classList.remove('hidden'); }
+function hide(el) { el.classList.add('hidden'); }
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// SCREEN 1: PIN ENTRY
+// PIN SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
-function setupPinInput() {
+function setupPIN() {
   pinBoxes.forEach((box, i) => {
     box.addEventListener('input', (e) => {
       const val = e.target.value.replace(/\D/g, '');
       e.target.value = val;
+      if (val && i < pinBoxes.length - 1) pinBoxes[i + 1].focus();
 
-      if (val && i < pinBoxes.length - 1) {
-        pinBoxes[i + 1].focus();
-      }
-
-      // Check if all 4 digits are entered
       const code = Array.from(pinBoxes).map(b => b.value).join('');
       if (code.length === 4) {
-        if (code === CORRECT_PIN) {
-          onPinCorrect();
-        } else {
-          onPinWrong();
-        }
+        code === CORRECT_PIN ? pinCorrect() : pinWrong();
       }
     });
 
     box.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !box.value && i > 0) {
-        pinBoxes[i - 1].focus();
-      }
+      if (e.key === 'Backspace' && !box.value && i > 0) pinBoxes[i - 1].focus();
     });
-
-    // Auto-focus first box
-    if (i === 0) setTimeout(() => box.focus(), 300);
   });
 }
 
-function onPinCorrect() {
+function pinCorrect() {
   pinBoxes.forEach(b => { b.classList.add('correct'); b.disabled = true; });
   pinError.classList.remove('show');
-
   setTimeout(() => {
-    showScreen(loadingScreen);
-    setTimeout(() => startAR(), 2500);
-  }, 600);
+    hide(pinScreen);
+    show(loadingScreen);
+    startAR(); // start AR while loading screen is showing
+  }, 700);
 }
 
-function onPinWrong() {
+function pinWrong() {
   pinBoxes.forEach(b => b.classList.add('wrong'));
   pinError.classList.add('show');
-
   setTimeout(() => {
     pinBoxes.forEach(b => { b.classList.remove('wrong'); b.value = ''; });
+    pinError.classList.remove('show');
     pinBoxes[0].focus();
-  }, 800);
+  }, 900);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SCREEN 2: LOADING → AR START
+// AR START
 // ═══════════════════════════════════════════════════════════════════════════════
 async function startAR() {
   try {
-    // iOS motion permission
+    // iOS gyro permission
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
       try { await DeviceOrientationEvent.requestPermission(); } catch (_) {}
     }
 
+    // Wait for A-Frame scene to finish bootstrapping
     if (!sceneEl.hasLoaded) {
       await new Promise(r => sceneEl.addEventListener('loaded', r, { once: true }));
     }
 
     const arSystem = sceneEl.systems['mindar-image-system'];
-    if (!arSystem) throw new Error('MindAR not found');
+    if (!arSystem) throw new Error('MindAR system not found');
 
-    const ready = new Promise(res => {
+    const arReady = new Promise(res => {
       let done = false;
       const ok = () => { if (!done) { done = true; res(); } };
       sceneEl.addEventListener('arReady', ok, { once: true });
-      setTimeout(ok, 10000);
+      setTimeout(ok, 10000); // fallback after 10s
     });
 
     arSystem.start();
-    await ready;
+    await arReady;
 
-    if (sceneEl.renderer) sceneEl.renderer.setClearColor(0x000000, 0);
+    // Force WebGL canvas transparent (call a few times to be sure)
+    const makeTransparent = () => {
+      if (sceneEl.renderer) sceneEl.renderer.setClearColor(0x000000, 0);
+    };
+    makeTransparent();
+    setTimeout(makeTransparent, 200);
+    setTimeout(makeTransparent, 600);
 
-    showScreen(arScreen);
+    // Show viewfinder, hide loading
+    hide(loadingScreen);
+    show(vfOverlay);
+
     setupTargets();
 
-  } catch (e) {
-    console.error('AR start failed:', e);
-    scanGuidance.textContent = '⚠️ Camera blocked. Allow camera and reload.';
-    showScreen(arScreen);
+  } catch (err) {
+    console.error('AR failed:', err);
+    hide(loadingScreen);
+    show(vfOverlay);
+    scanGuidance.textContent = '⚠️ Camera blocked — allow camera access and reload.';
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SCREEN 3: AR VIEWFINDER — Target Detection
+// TARGET DETECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 function setupTargets() {
   TARGETS.forEach(t => {
@@ -161,11 +167,12 @@ function setupTargets() {
     if (!el) return;
 
     el.addEventListener('targetFound', () => {
-      if (t.collected) return; // already got this one
-
+      if (t.collected) {
+        // Already collected — just show menu hint
+        scanGuidance.textContent = `${t.emoji} Already collected! Open ☰ to replay.`;
+        return;
+      }
       scanGuidance.textContent = `✨ ${t.title} detected!`;
-
-      // Sparkle effect → then open video
       playSparkles(() => {
         t.collected = true;
         addToMenu(t);
@@ -176,32 +183,31 @@ function setupTargets() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SPARKLE EFFECT
+// SPARKLES
 // ═══════════════════════════════════════════════════════════════════════════════
 function playSparkles(onDone) {
   sparkleContainer.classList.add('active');
   sparkleContainer.innerHTML = '';
 
-  const cx = window.innerWidth / 2;
+  const cx = window.innerWidth  / 2;
   const cy = window.innerHeight / 2;
-  const count = 30;
 
-  for (let i = 0; i < count; i++) {
-    const spark = document.createElement('div');
+  for (let i = 0; i < 32; i++) {
+    const spark  = document.createElement('div');
     spark.classList.add('sparkle');
 
-    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
-    const dist  = 60 + Math.random() * 120;
-    const dx    = Math.cos(angle) * dist;
-    const dy    = Math.sin(angle) * dist;
+    const angle  = (Math.PI * 2 * i) / 32 + (Math.random() - 0.5) * 0.4;
+    const dist   = 50 + Math.random() * 130;
+    const dx     = Math.cos(angle) * dist;
+    const dy     = Math.sin(angle) * dist;
+    const size   = 4 + Math.random() * 5;
 
-    spark.style.left = `${cx}px`;
-    spark.style.top  = `${cy}px`;
+    spark.style.left  = `${cx}px`;
+    spark.style.top   = `${cy}px`;
+    spark.style.width = spark.style.height = `${size}px`;
     spark.style.setProperty('--dx', `${dx}px`);
     spark.style.setProperty('--dy', `${dy}px`);
-    spark.style.animationDelay = `${Math.random() * 0.3}s`;
-    spark.style.width  = `${4 + Math.random() * 5}px`;
-    spark.style.height = spark.style.width;
+    spark.style.animationDelay = `${Math.random() * 0.25}s`;
 
     sparkleContainer.appendChild(spark);
   }
@@ -210,69 +216,60 @@ function playSparkles(onDone) {
     sparkleContainer.classList.remove('active');
     sparkleContainer.innerHTML = '';
     if (onDone) onDone();
-  }, 1400);
+  }, 1500);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VIDEO OVERLAY (fullscreen player)
+// VIDEO PLAYER
 // ═══════════════════════════════════════════════════════════════════════════════
-let currentVideoSrc = null;
-
-function openVideo(target) {
-  const srcVideo = document.getElementById(target.videoId);
-  if (!srcVideo) return;
-
-  // Copy source to the player video element
-  playerVideo.src = srcVideo.src;
-  playerVideo.loop = true;
-  playerTitle.textContent = target.title;
-
-  showScreen(videoOverlay);
-
-  playerVideo.currentTime = 0;
-  playerVideo.muted = false;
-  playerVideo.play().catch(() => {
-    playerVideo.muted = true;
-    playerVideo.play().catch(e => console.error('Play failed:', e));
-  });
-
-  currentVideoSrc = target;
-  updateToggleIcon();
-}
-
-function setupPlayerControls() {
+function setupPlayer() {
   playerToggle.addEventListener('click', () => {
-    if (playerVideo.paused) {
-      playerVideo.play().catch(() => {});
-    } else {
-      playerVideo.pause();
-    }
-    updateToggleIcon();
+    playerVideo.paused ? playerVideo.play().catch(() => {}) : playerVideo.pause();
+    updateIcon();
   });
-
-  playerVideo.addEventListener('play',  updateToggleIcon);
-  playerVideo.addEventListener('pause', updateToggleIcon);
+  playerVideo.addEventListener('play',  updateIcon);
+  playerVideo.addEventListener('pause', updateIcon);
 
   playerRestart.addEventListener('click', () => {
     playerVideo.currentTime = 0;
     playerVideo.play().catch(() => {});
   });
 
-  playerClose.addEventListener('click', () => {
-    playerVideo.pause();
-    playerVideo.src = '';
-    currentVideoSrc = null;
-    showScreen(arScreen);
-    scanGuidance.textContent = '🔍 Point camera at a coaster';
-  });
+  playerClose.addEventListener('click', closeVideo);
 }
 
-function updateToggleIcon() {
+function openVideo(target) {
+  const src = document.getElementById(target.videoId);
+  if (!src) return;
+
+  playerVideo.src   = src.src;
+  playerVideo.loop  = true;
+  playerTitle.textContent = `${target.emoji} ${target.title}`;
+
+  show(videoOverlay);
+
+  playerVideo.currentTime = 0;
+  playerVideo.muted = false;
+  playerVideo.play().catch(() => {
+    playerVideo.muted = true;
+    playerVideo.play().catch(e => console.error('Video play failed:', e));
+  });
+  updateIcon();
+}
+
+function closeVideo() {
+  playerVideo.pause();
+  playerVideo.src = '';
+  hide(videoOverlay);
+  scanGuidance.textContent = '🔍 Point camera at a coaster';
+}
+
+function updateIcon() {
   playerToggle.textContent = playerVideo.paused ? '▶' : '⏸';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MENU (collected videos)
+// MENU
 // ═══════════════════════════════════════════════════════════════════════════════
 function setupMenu() {
   menuBtn.addEventListener('click',   () => menuPanel.classList.add('open'));
@@ -281,34 +278,20 @@ function setupMenu() {
 
 function addToMenu(target) {
   menuEmpty.style.display = 'none';
-
-  if (menuList.querySelector(`#menu-card-${target.index}`)) return;
+  if (menuList.querySelector(`#mc-${target.index}`)) return;
 
   const card = document.createElement('div');
   card.classList.add('menu-card');
-  card.id = `menu-card-${target.index}`;
+  card.id = `mc-${target.index}`;
   card.innerHTML = `
     <div class="menu-card-info">
       <h4>${target.emoji} ${target.title}</h4>
       <p>Tap to replay</p>
     </div>
-    <button class="menu-card-play">▶</button>
-  `;
-
+    <button class="menu-card-play">▶</button>`;
   card.addEventListener('click', () => {
     menuPanel.classList.remove('open');
     openVideo(target);
   });
-
   menuList.appendChild(card);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SCREEN TRANSITIONS
-// ═══════════════════════════════════════════════════════════════════════════════
-function showScreen(screen) {
-  [pinScreen, loadingScreen, arScreen, videoOverlay].forEach(s => {
-    s.classList.remove('active');
-  });
-  screen.classList.add('active');
 }
