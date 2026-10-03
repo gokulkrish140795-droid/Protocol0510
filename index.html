@@ -12,18 +12,7 @@
   </head>
   <body>
 
-    <!--
-      LAYER STACK (z-index, bottom → top):
-        0   #ar-container   — AR camera canvas (ALWAYS in DOM, never hidden)
-        10  #vf-overlay     — gold border rail, sparkles, guidance HUD, menu button
-        50  #video-overlay  — fullscreen video player
-        55  #ending-screen  — happy birthday ending page
-        60  #menu-panel     — slide-out collected memories drawer
-        90  #loading-screen — "Initiating Protocol 0510..." transition
-       100  #pin-screen     — PIN entry (topmost, solid bg covers everything)
-    -->
-
-    <!-- ═══ BASE: AR Camera (always present, never hidden) ═══════════════════ -->
+    <!-- ═══ BASE: AR Camera (always present, never display:none) ═══════════ -->
     <div id="ar-container">
       <a-scene
         id="ar-scene"
@@ -44,74 +33,100 @@
       </a-scene>
     </div>
 
-    <!-- ═══ LAYER 10: Viewfinder HUD ════════════════════════════════════════ -->
+    <!-- ═══ LAYER 10: AR Viewfinder HUD ═══════════════════════════════════ -->
     <div id="vf-overlay" class="overlay hidden">
-      <div class="vf-topbar">
-        <span class="vf-logo">✦ PROTOCOL 0510</span>
-        <div class="vf-center">
-          <div class="vf-title">BIRTHDAY AR</div>
-          <div class="vf-sub">Aishwarya's Quest</div>
+      <!-- Top bar — reference image 2 style: ← BACK | centre | ♥ 0  🔊 -->
+      <div class="topbar">
+        <button id="vf-back" class="topbar-btn topbar-back">← BACK</button>
+        <div class="topbar-center"></div>
+        <div class="topbar-right">
+          <button id="vf-restart" class="topbar-icon" aria-label="Restart">↺</button>
+          <button id="vf-heart" class="topbar-heart disabled" aria-label="Memories" disabled>
+            <span class="heart-icon">♥</span><span id="heart-count" class="heart-count">0</span>
+          </button>
+          <button id="vf-mute" class="topbar-icon" aria-label="Mute">🔊</button>
         </div>
-        <button id="menu-btn" class="vf-icon-btn" aria-label="Menu">☰</button>
       </div>
-      <div class="viewfinder-border"></div>
+      <!-- Gold corner brackets -->
+      <div class="vf-bracket vf-tl"></div>
+      <div class="vf-bracket vf-tr"></div>
+      <div class="vf-bracket vf-bl"></div>
+      <div class="vf-bracket vf-br"></div>
+      <!-- Sparkle container -->
       <div id="sparkle-container" class="sparkle-container"></div>
-      <div id="scan-guidance" class="scan-guidance">🔍 Point camera at a coaster</div>
+      <!-- Bottom status bar — reference: "MEMORIES (0)  None collected yet" -->
+      <div id="vf-bottom-bar" class="vf-bottom-bar">
+        <span class="bottom-label">MEMORIES (<span id="bottom-count">0</span>)</span>
+        <span id="bottom-status" class="bottom-status">None collected yet</span>
+      </div>
     </div>
 
-    <!-- ═══ LAYER 50: Fullscreen Video Player ════════════════════════════════ -->
+    <!-- ═══ LAYER 50: Video Player ════════════════════════════════════════ -->
     <div id="video-overlay" class="overlay hidden">
-      <!-- Video fills full screen -->
       <video id="player-video" playsinline webkit-playsinline></video>
-
-      <!-- Tap area (invisible) — tapping toggles controls visibility -->
       <div id="player-tap-area" class="player-tap-area"></div>
 
-      <!-- Controls UI — overlaid on video, fades in/out on tap -->
+      <!-- Gold corner brackets on video too -->
+      <div class="vf-bracket vf-tl vf-bracket-video"></div>
+      <div class="vf-bracket vf-tr vf-bracket-video"></div>
+      <div class="vf-bracket vf-bl vf-bracket-video"></div>
+      <div class="vf-bracket vf-br vf-bracket-video"></div>
+
       <div id="player-ui" class="player-ui">
-        <!-- Transparent top bar -->
-        <div class="player-topbar">
-          <button id="player-close" class="player-close-btn" aria-label="Close">✕ Close</button>
-          <div id="player-title" class="player-title-text"></div>
-          <div class="player-topbar-spacer"></div>
+        <!-- Top: back + title + mute -->
+        <div class="topbar player-topbar">
+          <button id="player-close" class="topbar-btn topbar-back">← BACK</button>
+          <div id="player-title" class="topbar-center player-title-center"></div>
+          <div class="topbar-right">
+            <button id="player-mute" class="topbar-icon" aria-label="Mute">🔊</button>
+          </div>
         </div>
-        <!-- Bottom controls: restart | play/pause | skip+5s -->
+        <!-- Bottom: -5s | restart | play/pause | +5s -->
         <div class="player-controls">
+          <button id="player-back5" class="player-btn" aria-label="Back 5s">
+            <span class="pbtn-label">-5s</span>
+          </button>
           <button id="player-restart" class="player-btn" aria-label="Restart">↺</button>
-          <button id="player-toggle"  class="player-btn player-btn-big" aria-label="Play/Pause">⏸</button>
-          <button id="player-skip"    class="player-btn" aria-label="Skip 5 seconds">+5s</button>
+          <button id="player-toggle" class="player-btn player-btn-big" aria-label="Play/Pause">⏸</button>
+          <button id="player-skip" class="player-btn" aria-label="Skip 5s">
+            <span class="pbtn-label">+5s</span>
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- ═══ LAYER 55: Ending Screen ══════════════════════════════════════════ -->
+    <!-- ═══ LAYER 55: Ending Screen ═══════════════════════════════════════ -->
     <div id="ending-screen" class="overlay hidden">
-      <div class="ending-topbar">
-        <span class="ending-logo">✦ PROTOCOL 0510</span>
-        <span class="ending-badge-pill">✦ MISSION COMPLETE</span>
-        <button id="ending-menu-btn" class="vf-icon-btn" aria-label="Memories">☰</button>
+      <div class="topbar">
+        <span class="topbar-logo">✦ PROTOCOL 0510</span>
+        <span class="topbar-pill">✦ MISSION COMPLETE</span>
+        <div class="topbar-right">
+          <button id="ending-heart" class="topbar-heart" aria-label="Memories">
+            <span class="heart-icon">♥</span><span class="heart-count">2</span>
+          </button>
+          <button id="ending-mute" class="topbar-icon" aria-label="Mute">🔊</button>
+        </div>
       </div>
       <div class="ending-body">
-        <div class="ending-sparkles" id="ending-sparkles"></div>
+        <div id="ending-sparkles" class="ending-sparkles"></div>
         <div class="ending-emoji-ring">🎂</div>
         <div class="ending-card">
-          <div class="ending-badge">✦ PROTOCOL 0510: COMPLETE</div>
-          <h1 class="ending-title">Happy Birthday<br>Aishu! ✨</h1>
+          <div class="badge-pill">✦ PROTOCOL 0510: COMPLETE</div>
+          <h1 class="heading-gold">Happy Birthday<br>Aishu! ✨</h1>
           <p class="ending-msg">May your 30th be unforgettable.</p>
-          <div class="ending-divider"></div>
-          <p class="ending-sub">Both memories have been unlocked.<br>The stray heart is yours forever. 💗</p>
+          <div class="gold-divider"></div>
+          <p class="text-dim-sm">Both memories have been unlocked.<br>The stray heart is yours forever. 💗</p>
           <button id="replay-btn" class="cta-btn">✦ Replay Memories</button>
           <button id="home-btn" class="ghost-btn">← Back to Home</button>
         </div>
       </div>
-      <!-- Gold corner accents -->
       <div class="corner corner-tl"></div>
       <div class="corner corner-tr"></div>
       <div class="corner corner-bl"></div>
       <div class="corner corner-br"></div>
     </div>
 
-    <!-- ═══ LAYER 60: Memories Menu Panel ════════════════════════════════════ -->
+    <!-- ═══ LAYER 60: Memories Panel ══════════════════════════════════════ -->
     <div id="menu-panel" class="menu-panel">
       <div class="menu-header">
         <span class="menu-title-text">✦ Collected Memories</span>
@@ -122,60 +137,52 @@
       </div>
     </div>
 
-    <!-- ═══ LAYER 90: Loading / Initiating Screen ════════════════════════════ -->
+    <!-- ═══ LAYER 90: Loading Screen ══════════════════════════════════════ -->
     <div id="loading-screen" class="overlay hidden">
-      <div class="loading-topbar">
-        <span class="loading-logo">✦ PROTOCOL 0510</span>
+      <div class="topbar">
+        <span class="topbar-logo">✦ PROTOCOL 0510</span>
       </div>
       <div class="loading-body">
         <div class="loading-ring">
           <div class="loading-spinner"></div>
           <div class="loading-icon">✦</div>
         </div>
-        <h2 class="loading-text">Initiating Protocol 0510...</h2>
-        <p class="loading-sub">Calibrating AR targets. Please wait.</p>
-        <div class="loading-dots">
-          <span></span><span></span><span></span>
-        </div>
+        <h2 class="heading-gold heading-sm">Initiating Protocol 0510...</h2>
+        <p class="text-dim-sm">Calibrating AR targets. Please wait.</p>
+        <div class="loading-dots"><span></span><span></span><span></span></div>
       </div>
       <div class="corner corner-bl"></div>
       <div class="corner corner-br"></div>
     </div>
 
-    <!-- ═══ LAYER 100: PIN Screen ════════════════════════════════════════════ -->
+    <!-- ═══ LAYER 100: PIN / Entry Screen ═════════════════════════════════ -->
     <div id="pin-screen" class="overlay" aria-label="PIN Entry Screen">
 
-      <!-- Top navigation bar (matches reference exactly) -->
-      <div class="protocol-topbar">
-        <div class="topbar-left">
-          <span class="topbar-logo">✦ PROTOCOL 0510</span>
-        </div>
+      <!-- Top bar — reference image 1: ✦ PROTOCOL 0510 | PROJECT AR / Quest | ♥ 0  🔊 -->
+      <div class="topbar">
+        <span class="topbar-logo">✦ PROTOCOL 0510</span>
         <div class="topbar-center">
-          <div class="topbar-title">BIRTHDAY AR</div>
-          <div class="topbar-sub">Aishwarya's Quest</div>
+          <div class="topbar-title">PROJECT AR</div>
+          <div class="topbar-sub">Aishwarya's Birthday Quest</div>
         </div>
         <div class="topbar-right">
-          <button id="bgm-toggle" class="topbar-icon-btn" aria-label="Toggle BGM">🔊</button>
+          <button id="pin-heart" class="topbar-heart disabled" disabled>
+            <span class="heart-icon">♥</span><span class="heart-count">0</span>
+          </button>
+          <button id="bgm-toggle" class="topbar-icon" aria-label="Toggle BGM">🔊</button>
         </div>
       </div>
 
-      <!-- Scrollable content area -->
       <div class="pin-scroll">
-
-        <!-- Main mission card -->
         <div class="main-card">
-          <div class="mission-badge">✦ PROTOCOL 0510: MISSION COMPLETE</div>
-
-          <h1 class="mission-title">Protocol 0510&nbsp;:<br>Mission Completed</h1>
-
-          <p class="mission-body">
+          <div class="badge-pill">✦ PROTOCOL 0510: MISSION BRIEF</div>
+          <h1 class="heading-gold">Protocol 0510&nbsp;:<br>Mission Completed</h1>
+          <p class="card-body">
             The stray heart has been found. A special visitor from heaven is awaiting for your arrival.
           </p>
-
           <div class="quote-block">
             <em>"Enter the code to enter."</em>
           </div>
-
           <div class="pin-boxes" id="pin-boxes">
             <input type="tel" maxlength="1" class="pin-digit" data-index="0" autocomplete="off" inputmode="numeric" aria-label="PIN digit 1" />
             <input type="tel" maxlength="1" class="pin-digit" data-index="1" autocomplete="off" inputmode="numeric" aria-label="PIN digit 2" />
@@ -184,15 +191,13 @@
           </div>
           <div class="pin-error" id="pin-error">Incorrect code — try again.</div>
         </div>
+      </div>
 
-      </div><!-- /pin-scroll -->
-
-      <!-- Decorative gold corner accents (exactly like reference) -->
       <div class="corner corner-tl"></div>
       <div class="corner corner-tr"></div>
       <div class="corner corner-bl"></div>
       <div class="corner corner-br"></div>
-    </div><!-- /pin-screen -->
+    </div>
 
     <script type="module" src="./src/main.js"></script>
   </body>

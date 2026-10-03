@@ -1,21 +1,19 @@
 /**
- * Protocol 0510 — v8
- *
- * FLOW: PIN entry → Loading/AR init → AR Viewfinder → Scan → Sparkles
- *       → Fullscreen Video (BGM ducked/paused) → Close → All collected → Ending page
- *
- * BGM: bgm_intro.mp3 plays from PIN correct, pauses during video, resumes on close.
+ * Protocol 0510 — v9
+ * Flow: PIN → Loading/AR → Viewfinder → Scan → Sparkles → Video → Ending
+ * BGM: starts on first PIN-screen touch, pauses during video, resumes on close
+ * Heart counter: increments on scan, enables heart btn, updates bottom bar
  */
 
-// ─── Target definitions ───────────────────────────────────────────────────────
+// ─── Targets ─────────────────────────────────────────────────────────────────
 const TARGETS = [
-  { index: 0, videoId: 'video-memorial', title: '🕊️ Uncle Memorial',  emoji: '🕊️', collected: false },
-  { index: 1, videoId: 'video-montage',  title: '🎂 Birthday Wishes', emoji: '🎂', collected: false },
+  { index: 0, videoId: 'video-memorial', title: 'Uncle Memorial',  emoji: '🕊️', collected: false },
+  { index: 1, videoId: 'video-montage',  title: 'Birthday Wishes', emoji: '🎂', collected: false },
 ];
 const CORRECT_PIN = '0510';
 
-// ─── BGM ──────────────────────────────────────────────────────────────────────
-let bgm = null;
+// ─── BGM ─────────────────────────────────────────────────────────────────────
+let bgm      = null;
 let bgmMuted = false;
 
 function initBGM() {
@@ -27,61 +25,110 @@ function initBGM() {
 }
 function pauseBGM()  { if (bgm) bgm.pause(); }
 function resumeBGM() { if (bgm && !bgmMuted) bgm.play().catch(() => {}); }
-function duckBGM()   { if (bgm) { bgm.volume = 0.12; } }
-function unduckBGM() { if (bgm && !bgmMuted) { bgm.volume = 1.0; } }
+function duckBGM()   { if (bgm) bgm.volume = 0.12; }
+function unduckBGM() { if (bgm && !bgmMuted) bgm.volume = 1.0; }
+
 function toggleBGM() {
   bgmMuted = !bgmMuted;
   if (bgm) bgm.volume = bgmMuted ? 0 : 1.0;
-  document.getElementById('bgm-toggle').textContent = bgmMuted ? '🔇' : '🔊';
+  updateAllMuteBtns();
+}
+function updateAllMuteBtns() {
+  const icon = bgmMuted ? '🔇' : '🔊';
+  ['bgm-toggle', 'vf-mute', 'player-mute', 'ending-mute'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = icon;
+  });
+}
+
+// ─── Heart / memory counter ───────────────────────────────────────────────────
+let heartCount = 0;
+
+function incrementHeart() {
+  heartCount++;
+  // Sync all .heart-count spans
+  document.querySelectorAll('.heart-count').forEach(el => { el.textContent = heartCount; });
+  // Enable heart buttons once first memory collected
+  if (heartCount === 1) {
+    ['vf-heart', 'pin-heart'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.classList.remove('disabled'); el.disabled = false; }
+    });
+  }
+  updateBottomBar();
+}
+
+function resetHeartDisplay() {
+  heartCount = 0;
+  document.querySelectorAll('.heart-count').forEach(el => { el.textContent = '0'; });
+  ['vf-heart', 'pin-heart'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.add('disabled'); el.disabled = true; }
+  });
+  updateBottomBar();
+}
+
+function updateBottomBar() {
+  const countEl  = document.getElementById('bottom-count');
+  const statusEl = document.getElementById('bottom-status');
+  if (countEl)  countEl.textContent = heartCount;
+  if (statusEl) {
+    statusEl.textContent = heartCount === 0 ? 'None collected yet'
+      : heartCount === 1 ? '1 memory unlocked ✦'
+      : `${heartCount} memories unlocked ✦`;
+  }
 }
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 let pinScreen, loadingScreen, vfOverlay, videoOverlay, endingScreen;
-let pinBoxes, pinError, bgmToggle;
-let scanGuidance, sparkleContainer;
-let menuBtn, menuPanel, menuClose, menuList, menuEmpty;
-let endingMenuBtn;
+let pinBoxes, pinError;
+let sparkleContainer;
+let menuPanel, menuClose, menuList, menuEmpty;
 let playerVideo, playerToggle, playerRestart, playerClose, playerTitle;
-let replayBtn;
-let sceneEl;
+let playerUi, playerTapArea, playerSkip, playerBack5;
+let replayBtn, sceneEl;
+let controlsHideTimer = null;
 
+// AR initialisation is one-time only
+let arInitialized  = false;
+let targetsSetup   = false;
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
 function init() {
-  pinScreen    = document.getElementById('pin-screen');
-  loadingScreen= document.getElementById('loading-screen');
-  vfOverlay    = document.getElementById('vf-overlay');
-  videoOverlay = document.getElementById('video-overlay');
-  endingScreen = document.getElementById('ending-screen');
+  pinScreen     = document.getElementById('pin-screen');
+  loadingScreen = document.getElementById('loading-screen');
+  vfOverlay     = document.getElementById('vf-overlay');
+  videoOverlay  = document.getElementById('video-overlay');
+  endingScreen  = document.getElementById('ending-screen');
 
-  pinBoxes  = document.querySelectorAll('.pin-digit');
-  pinError  = document.getElementById('pin-error');
-  bgmToggle = document.getElementById('bgm-toggle');
+  pinBoxes = document.querySelectorAll('.pin-digit');
+  pinError = document.getElementById('pin-error');
 
-  scanGuidance     = document.getElementById('scan-guidance');
   sparkleContainer = document.getElementById('sparkle-container');
 
-  menuBtn      = document.getElementById('menu-btn');
-  menuPanel    = document.getElementById('menu-panel');
-  menuClose    = document.getElementById('menu-close');
-  menuList     = document.getElementById('menu-list');
-  menuEmpty    = document.getElementById('menu-empty');
-  endingMenuBtn= document.getElementById('ending-menu-btn');
+  menuPanel = document.getElementById('menu-panel');
+  menuClose = document.getElementById('menu-close');
+  menuList  = document.getElementById('menu-list');
+  menuEmpty = document.getElementById('menu-empty');
 
   playerVideo   = document.getElementById('player-video');
   playerToggle  = document.getElementById('player-toggle');
   playerRestart = document.getElementById('player-restart');
   playerClose   = document.getElementById('player-close');
   playerTitle   = document.getElementById('player-title');
+  playerUi      = document.getElementById('player-ui');
+  playerTapArea = document.getElementById('player-tap-area');
+  playerSkip    = document.getElementById('player-skip');
+  playerBack5   = document.getElementById('player-back5');
 
   replayBtn = document.getElementById('replay-btn');
-  let homeBtn = document.getElementById('home-btn');
   sceneEl   = document.getElementById('ar-scene');
 
   setupPIN();
   setupPlayer();
   setupMenu();
-  if (bgmToggle) bgmToggle.addEventListener('click', toggleBGM);
+  wireGlobalButtons();
 
-  // Auto-focus first PIN digit
   setTimeout(() => pinBoxes[0]?.focus(), 350);
 }
 
@@ -91,30 +138,44 @@ if (document.readyState === 'loading') {
   init();
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ─── Wire up global buttons (mute / heart / back / restart) ──────────────────
+function wireGlobalButtons() {
+  // All mute / BGM buttons
+  ['bgm-toggle', 'vf-mute', 'player-mute', 'ending-mute'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', toggleBGM);
+  });
+
+  // Heart / memories buttons → open menu panel
+  ['vf-heart', 'pin-heart', 'ending-heart'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', () => menuPanel.classList.add('open'));
+  });
+
+  // Viewfinder BACK and RESTART → go back to PIN home screen
+  document.getElementById('vf-back')?.addEventListener('click',    goHome);
+  document.getElementById('vf-restart')?.addEventListener('click', goHome);
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
 // PIN SCREEN
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 function setupPIN() {
-  // Start BGM on the very first touch of the PIN screen (guaranteed user gesture)
+  // BGM starts on the very first touch of the PIN screen (user gesture)
   pinScreen.addEventListener('pointerdown', () => initBGM(), { once: true });
 
   pinBoxes.forEach((box, i) => {
     box.addEventListener('input', e => {
-      // Strip non-digits
       const val = e.target.value.replace(/\D/g, '');
       e.target.value = val;
       if (val && i < pinBoxes.length - 1) pinBoxes[i + 1].focus();
-
       const code = Array.from(pinBoxes).map(b => b.value).join('');
       if (code.length === 4) {
         code === CORRECT_PIN ? pinCorrect() : pinWrong();
       }
     });
-
     box.addEventListener('keydown', e => {
       if (e.key === 'Backspace' && !box.value && i > 0) pinBoxes[i - 1].focus();
     });
@@ -124,7 +185,6 @@ function setupPIN() {
 function pinCorrect() {
   pinBoxes.forEach(b => { b.classList.add('correct'); b.disabled = true; });
   pinError.classList.remove('show');
-
   setTimeout(() => {
     hide(pinScreen);
     show(loadingScreen);
@@ -142,10 +202,17 @@ function pinWrong() {
   }, 900);
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// AR START
-// ══════════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════════
+// AR START  (one-time init; subsequent calls just reveal viewfinder)
+// ════════════════════════════════════════════════════════════════════════════
 async function startAR() {
+  if (arInitialized) {
+    hide(loadingScreen);
+    show(vfOverlay);
+    return;
+  }
+
   try {
     // iOS gyro permission
     if (typeof DeviceOrientationEvent !== 'undefined' &&
@@ -153,100 +220,91 @@ async function startAR() {
       try { await DeviceOrientationEvent.requestPermission(); } catch (_) {}
     }
 
-    // Wait for A-Frame to bootstrap
     if (!sceneEl.hasLoaded) {
       await new Promise(r => sceneEl.addEventListener('loaded', r, { once: true }));
     }
 
     const arSystem = sceneEl.systems['mindar-image-system'];
-    if (!arSystem) throw new Error('MindAR system not available');
+    if (!arSystem) throw new Error('MindAR not ready');
 
     const arReady = new Promise(res => {
       let done = false;
       const ok = () => { if (!done) { done = true; res(); } };
       sceneEl.addEventListener('arReady', ok, { once: true });
-      setTimeout(ok, 10000); // 10s fallback
+      setTimeout(ok, 10000); // fallback
     });
 
     arSystem.start();
     await arReady;
+    arInitialized = true;
 
-    // Force WebGL canvas transparent — call 3× to guarantee
-    const makeTransparent = () => {
-      if (sceneEl.renderer) sceneEl.renderer.setClearColor(0x000000, 0);
-    };
-    makeTransparent();
-    setTimeout(makeTransparent, 200);
-    setTimeout(makeTransparent, 700);
+    // Force WebGL canvas transparent (called 3× to be safe on Android)
+    const clearCanvas = () => { if (sceneEl.renderer) sceneEl.renderer.setClearColor(0x000000, 0); };
+    clearCanvas();
+    setTimeout(clearCanvas, 200);
+    setTimeout(clearCanvas, 700);
 
     hide(loadingScreen);
     show(vfOverlay);
     setupTargets();
 
   } catch (err) {
-    console.error('AR start error:', err);
+    console.error('AR init error:', err);
     hide(loadingScreen);
     show(vfOverlay);
-    scanGuidance.textContent = '⚠️ Camera blocked — please allow camera access and reload.';
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════════
 // TARGET DETECTION
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 function setupTargets() {
+  if (targetsSetup) return;
+  targetsSetup = true;
+
   TARGETS.forEach(t => {
     const el = document.querySelector(`#target-${t.index}`);
     if (!el) return;
 
     el.addEventListener('targetFound', () => {
-      if (t.collected) {
-        scanGuidance.textContent = `${t.emoji} Already saved! Open ☰ to replay.`;
-        return;
-      }
-      scanGuidance.textContent = `✨ ${t.title} detected!`;
-      duckBGM(); // Duck BGM for sparkle moment
+      if (t.collected) return; // already unlocked, do nothing
+      duckBGM();
       playSparkles(() => {
         unduckBGM();
         t.collected = true;
+        incrementHeart();
         addToMenu(t);
         openVideo(t);
-
-        // If both collected, queue ending screen
-        if (TARGETS.every(x => x.collected)) {
-          playerVideo.addEventListener('pause', maybeShowEnding, { once: false });
-        }
       });
     });
   });
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════════
 // SPARKLES
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 function playSparkles(onDone) {
   sparkleContainer.classList.add('active');
   sparkleContainer.innerHTML = '';
-
-  const cx = window.innerWidth  / 2;
+  const cx = window.innerWidth / 2;
   const cy = window.innerHeight / 2;
-
   for (let i = 0; i < 34; i++) {
-    const spark = document.createElement('div');
-    spark.classList.add('sparkle');
+    const s = document.createElement('div');
+    s.classList.add('sparkle');
     const angle = (Math.PI * 2 * i) / 34 + (Math.random() - 0.5) * 0.4;
     const dist  = 55 + Math.random() * 140;
     const size  = 4 + Math.random() * 6;
-    spark.style.cssText = `
+    s.style.cssText = `
       left:${cx}px; top:${cy}px;
       width:${size}px; height:${size}px;
-      --dx:${Math.cos(angle)*dist}px;
-      --dy:${Math.sin(angle)*dist}px;
-      animation-delay:${Math.random()*0.25}s;
+      --dx:${Math.cos(angle) * dist}px;
+      --dy:${Math.sin(angle) * dist}px;
+      animation-delay:${Math.random() * 0.25}s;
     `;
-    sparkleContainer.appendChild(spark);
+    sparkleContainer.appendChild(s);
   }
-
   setTimeout(() => {
     sparkleContainer.classList.remove('active');
     sparkleContainer.innerHTML = '';
@@ -254,50 +312,54 @@ function playSparkles(onDone) {
   }, 1500);
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════════════
 // VIDEO PLAYER
-// ══════════════════════════════════════════════════════════════════════════════
-let playerUi, playerTapArea, playerSkip;
-let controlsHideTimer = null;
-
+// ════════════════════════════════════════════════════════════════════════════
 function setupPlayer() {
-  playerUi      = document.getElementById('player-ui');
-  playerTapArea = document.getElementById('player-tap-area');
-  playerSkip    = document.getElementById('player-skip');
-
-  // Play / Pause toggle
+  // Play / Pause
   playerToggle.addEventListener('click', () => {
-    playerVideo.paused ? playerVideo.play().catch(()=>{}) : playerVideo.pause();
+    playerVideo.paused ? playerVideo.play().catch(() => {}) : playerVideo.pause();
     updateToggleIcon();
     keepControlsVisible();
   });
   playerVideo.addEventListener('play',  updateToggleIcon);
   playerVideo.addEventListener('pause', updateToggleIcon);
 
-  // Restart from beginning
+  // Restart (from beginning)
   playerRestart.addEventListener('click', () => {
     playerVideo.currentTime = 0;
-    playerVideo.play().catch(()=>{});
+    playerVideo.play().catch(() => {});
     keepControlsVisible();
   });
 
-  // Skip forward 5 seconds
-  playerSkip.addEventListener('click', () => {
-    playerVideo.currentTime = Math.min(playerVideo.currentTime + 5, playerVideo.duration || playerVideo.currentTime + 5);
+  // Skip back 5 s
+  playerBack5?.addEventListener('click', () => {
+    playerVideo.currentTime = Math.max(0, playerVideo.currentTime - 5);
     keepControlsVisible();
   });
 
-  // Tap anywhere on video → toggle controls fade
+  // Skip forward 5 s
+  playerSkip?.addEventListener('click', () => {
+    playerVideo.currentTime = Math.min(
+      playerVideo.currentTime + 5,
+      playerVideo.duration || playerVideo.currentTime + 5
+    );
+    keepControlsVisible();
+  });
+
+  // Tap video → toggle controls fade
   playerTapArea.addEventListener('click', toggleControls);
 
+  // ← BACK closes video
   playerClose.addEventListener('click', closeVideo);
 }
 
 function showControls() {
   playerUi.classList.remove('hidden-controls');
   clearTimeout(controlsHideTimer);
+  // Auto-hide after 3 s while video is playing
   controlsHideTimer = setTimeout(() => {
-    // Only auto-hide if video is playing
     if (!playerVideo.paused) playerUi.classList.add('hidden-controls');
   }, 3000);
 }
@@ -311,8 +373,7 @@ function keepControlsVisible() {
 }
 
 function toggleControls() {
-  const hidden = playerUi.classList.contains('hidden-controls');
-  if (hidden) {
+  if (playerUi.classList.contains('hidden-controls')) {
     showControls();
   } else {
     clearTimeout(controlsHideTimer);
@@ -320,16 +381,15 @@ function toggleControls() {
   }
 }
 
-
 function openVideo(target) {
   const srcEl = document.getElementById(target.videoId);
   if (!srcEl) return;
 
-  pauseBGM(); // Stop BGM while video plays
+  pauseBGM();
 
-  playerVideo.src   = srcEl.src;
-  playerVideo.loop  = true;
-  playerTitle.textContent = target.title;
+  playerVideo.src  = srcEl.src;
+  playerVideo.loop = true;
+  playerTitle.textContent = `${target.emoji} ${target.title}`;
 
   show(videoOverlay);
 
@@ -340,8 +400,6 @@ function openVideo(target) {
     playerVideo.play().catch(e => console.error('Video play failed:', e));
   });
   updateToggleIcon();
-
-  // Show controls then auto-hide after 3s
   showControls();
 }
 
@@ -352,10 +410,10 @@ function closeVideo() {
   playerUi.classList.remove('hidden-controls');
   hide(videoOverlay);
   resumeBGM();
-  scanGuidance.textContent = '🔍 Point camera at a coaster';
 
+  // Both memories collected? Show ending after brief delay
   if (TARGETS.every(t => t.collected)) {
-    setTimeout(() => showEndingScreen(), 600);
+    setTimeout(showEndingScreen, 600);
   }
 }
 
@@ -363,36 +421,27 @@ function updateToggleIcon() {
   playerToggle.textContent = playerVideo.paused ? '▶' : '⏸';
 }
 
-function maybeShowEnding() {
-  // Cleanup — we use the closeVideo path instead
-}
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 // ENDING SCREEN
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 function showEndingScreen() {
   show(endingScreen);
   launchEndingSparkles();
 }
 
 function launchEndingSparkles() {
-  const container = document.getElementById('ending-sparkles');
-  if (!container) return;
-  // Create floating gold sparkles at random positions
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 18; i++) {
     const s = document.createElement('div');
-    const size = 4 + Math.random() * 5;
+    const sz = 4 + Math.random() * 5;
     s.style.cssText = `
-      position:absolute;
-      width:${size}px; height:${size}px;
-      border-radius:50%;
-      background:#d4a84c;
-      box-shadow:0 0 8px #d4a84c;
-      left:${Math.random()*100}vw;
-      top:${60 + Math.random()*40}vh;
-      animation: sparkle-fly 2.5s ease-out ${Math.random()*1.5}s forwards;
-      --dx:${(Math.random()-0.5)*200}px;
-      --dy:${-(40+Math.random()*120)}px;
+      position:fixed; width:${sz}px; height:${sz}px; border-radius:50%;
+      background:#d4a84c; box-shadow:0 0 8px #d4a84c;
+      left:${Math.random() * 100}vw; top:${60 + Math.random() * 36}vh;
+      animation: sparkle-fly 2.5s ease-out ${Math.random() * 1.5}s forwards;
+      --dx:${(Math.random() - 0.5) * 200}px;
+      --dy:${-(40 + Math.random() * 120)}px;
+      pointer-events:none; z-index:56;
     `;
     document.body.appendChild(s);
     setTimeout(() => s.remove(), 5000);
@@ -400,13 +449,11 @@ function launchEndingSparkles() {
 }
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 // MENU
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 function setupMenu() {
-  menuBtn?.addEventListener('click', () => menuPanel.classList.add('open'));
   menuClose?.addEventListener('click', () => menuPanel.classList.remove('open'));
-  endingMenuBtn?.addEventListener('click', () => menuPanel.classList.add('open'));
 
   replayBtn?.addEventListener('click', () => {
     hide(endingScreen);
@@ -416,50 +463,15 @@ function setupMenu() {
   document.getElementById('home-btn')?.addEventListener('click', goHome);
 }
 
-// Reset the full experience and return to PIN screen
-function goHome() {
-  // Pause / reset video
-  playerVideo.pause();
-  playerVideo.src = '';
-
-  // Pause BGM
-  pauseBGM();
-
-  // Reset target collected state
-  TARGETS.forEach(t => { t.collected = false; });
-
-  // Reset PIN boxes
-  pinBoxes.forEach(b => { b.value = ''; b.disabled = false; b.classList.remove('correct', 'wrong'); });
-  pinError.classList.remove('show');
-
-  // Reset menu list
-  if (menuList) {
-    menuList.querySelectorAll('.menu-card').forEach(c => c.remove());
-    menuEmpty.style.display = '';
-  }
-
-  // Hide all overlays, close menu, show pin screen
-  hide(endingScreen);
-  hide(videoOverlay);
-  hide(vfOverlay);
-  hide(loadingScreen);
-  menuPanel.classList.remove('open');
-  show(pinScreen);
-
-  // Refocus PIN
-  setTimeout(() => pinBoxes[0]?.focus(), 300);
-}
-
 function addToMenu(target) {
   menuEmpty.style.display = 'none';
   if (menuList.querySelector(`#mc-${target.index}`)) return;
-
   const card = document.createElement('div');
   card.classList.add('menu-card');
   card.id = `mc-${target.index}`;
   card.innerHTML = `
     <div class="menu-card-info">
-      <h4>${target.emoji} ${target.title.replace(/^[^ ]+ /, '')}</h4>
+      <h4>${target.emoji} ${target.title}</h4>
       <p>Tap to replay</p>
     </div>
     <button class="menu-card-play" aria-label="Play">▶</button>`;
@@ -468,4 +480,43 @@ function addToMenu(target) {
     openVideo(target);
   });
   menuList.appendChild(card);
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// GO HOME  (resets full experience, returns to PIN screen)
+// ════════════════════════════════════════════════════════════════════════════
+function goHome() {
+  // Stop video
+  playerVideo.pause();
+  playerVideo.src = '';
+  clearTimeout(controlsHideTimer);
+  playerUi.classList.remove('hidden-controls');
+
+  // Pause BGM
+  pauseBGM();
+
+  // Reset targets
+  TARGETS.forEach(t => { t.collected = false; });
+
+  // Reset heart counter
+  resetHeartDisplay();
+
+  // Reset PIN
+  pinBoxes.forEach(b => { b.value = ''; b.disabled = false; b.classList.remove('correct', 'wrong'); });
+  pinError.classList.remove('show');
+
+  // Clear memories menu
+  menuList.querySelectorAll('.menu-card').forEach(c => c.remove());
+  menuEmpty.style.display = '';
+
+  // Hide everything, show PIN
+  hide(endingScreen);
+  hide(videoOverlay);
+  hide(vfOverlay);
+  hide(loadingScreen);
+  menuPanel.classList.remove('open');
+  show(pinScreen);
+
+  setTimeout(() => pinBoxes[0]?.focus(), 300);
 }
