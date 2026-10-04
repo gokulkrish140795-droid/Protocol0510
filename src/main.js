@@ -16,23 +16,70 @@ const CORRECT_PIN = '0510';
 let bgm      = null;
 let bgmMuted = false;
 
-function initBGM() {
-  if (bgm) return;
-  bgm = new Audio('./assets/bgm_intro.mp3');
-  bgm.loop = true;
-  bgm.volume = 1.0;
-  bgm.play().catch(() => {});
+function getBgm() {
+  if (!bgm) {
+    bgm = document.getElementById('bgm-audio');
+    if (!bgm) {
+      bgm = new Audio('./assets/bgm_intro.mp3');
+    }
+    bgm.loop = true;
+  }
+  return bgm;
 }
-function pauseBGM()  { if (bgm) bgm.pause(); }
-function resumeBGM() { if (bgm && !bgmMuted) bgm.play().catch(() => {}); }
-function duckBGM()   { if (bgm) bgm.volume = 0.12; }
-function unduckBGM() { if (bgm && !bgmMuted) bgm.volume = 1.0; }
+
+function startBGM() {
+  if (bgmMuted) return;
+  const audio = getBgm();
+  if (audio && audio.paused) {
+    audio.volume = 1.0;
+    const p = audio.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(err => {
+        console.warn('BGM awaiting user gesture:', err);
+      });
+    }
+  }
+}
+
+function initBGM() {
+  startBGM();
+}
+
+function pauseBGM() {
+  const audio = getBgm();
+  if (audio) audio.pause();
+}
+
+function resumeBGM() {
+  if (!bgmMuted) {
+    startBGM();
+  }
+}
+
+function duckBGM() {
+  const audio = getBgm();
+  if (audio) audio.volume = 0.12;
+}
+
+function unduckBGM() {
+  const audio = getBgm();
+  if (audio && !bgmMuted) audio.volume = 1.0;
+}
 
 function toggleBGM() {
   bgmMuted = !bgmMuted;
-  if (bgm) bgm.volume = bgmMuted ? 0 : 1.0;
+  const audio = getBgm();
+  if (bgmMuted) {
+    if (audio) audio.pause();
+  } else {
+    if (audio) {
+      audio.volume = 1.0;
+      audio.play().catch(() => {});
+    }
+  }
   updateAllMuteBtns();
 }
+
 function updateAllMuteBtns() {
   const icon = bgmMuted ? '🔇' : '🔊';
   ['bgm-toggle', 'vf-mute', 'player-mute', 'ending-mute'].forEach(id => {
@@ -163,11 +210,17 @@ function wireGlobalButtons() {
 // PIN SCREEN
 // ════════════════════════════════════════════════════════════════════════════
 function setupPIN() {
-  // BGM starts on the very first touch of the PIN screen (user gesture)
-  pinScreen.addEventListener('pointerdown', () => initBGM(), { once: true });
+  // Global unlock on ANY mobile interaction (tap, touch, click, key)
+  const unlockAudio = () => {
+    startBGM();
+  };
+  ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'].forEach(evt => {
+    window.addEventListener(evt, unlockAudio, { passive: true });
+  });
 
   pinBoxes.forEach((box, i) => {
     box.addEventListener('input', e => {
+      startBGM();
       const val = e.target.value.replace(/\D/g, '');
       e.target.value = val;
       if (val && i < pinBoxes.length - 1) pinBoxes[i + 1].focus();
@@ -177,6 +230,7 @@ function setupPIN() {
       }
     });
     box.addEventListener('keydown', e => {
+      startBGM();
       if (e.key === 'Backspace' && !box.value && i > 0) pinBoxes[i - 1].focus();
     });
   });
@@ -185,6 +239,7 @@ function setupPIN() {
 function pinCorrect() {
   pinBoxes.forEach(b => { b.classList.add('correct'); b.disabled = true; });
   pinError.classList.remove('show');
+  startBGM(); // Explicitly trigger BGM on correct PIN
   setTimeout(() => {
     hide(pinScreen);
     show(loadingScreen);
@@ -210,6 +265,7 @@ async function startAR() {
   if (arInitialized) {
     hide(loadingScreen);
     show(vfOverlay);
+    resumeBGM();
     return;
   }
 
@@ -246,12 +302,14 @@ async function startAR() {
 
     hide(loadingScreen);
     show(vfOverlay);
+    resumeBGM();
     setupTargets();
 
   } catch (err) {
     console.error('AR init error:', err);
     hide(loadingScreen);
     show(vfOverlay);
+    resumeBGM();
   }
 }
 
