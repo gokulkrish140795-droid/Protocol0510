@@ -175,6 +175,7 @@ function init() {
   setupPlayer();
   setupMenu();
   wireGlobalButtons();
+  setupHistory();
 
   setTimeout(() => pinBoxes[0]?.focus(), 350);
 }
@@ -188,21 +189,79 @@ if (document.readyState === 'loading') {
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 
+// ─── Instant Tap Listener for Mobile (eliminates 300ms delay & drag cancel) ─
+function addTapListener(elOrId, callback) {
+  const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+  if (!el) return;
+  let lastTap = 0;
+  const handler = (e) => {
+    const now = Date.now();
+    if (now - lastTap < 300) return;
+    lastTap = now;
+    callback(e);
+  };
+  el.addEventListener('pointerup', handler);
+  el.addEventListener('click', handler);
+}
+
+// ─── Browser / Android Hardware Back Button Handling ─────────────────────────
+let currentHistoryScreen = 'pin';
+
+function pushHistory(screen) {
+  if (currentHistoryScreen === screen) return;
+  currentHistoryScreen = screen;
+  try {
+    window.history.pushState({ screen }, '');
+  } catch (_) {}
+}
+
+function setupHistory() {
+  try {
+    window.history.replaceState({ screen: 'pin' }, '');
+  } catch (_) {}
+
+  window.addEventListener('popstate', () => {
+    // 1. If menu panel is open, back closes menu
+    if (menuPanel && menuPanel.classList.contains('open')) {
+      menuPanel.classList.remove('open');
+      return;
+    }
+    // 2. If video is open, back closes video
+    if (videoOverlay && !videoOverlay.classList.contains('hidden')) {
+      closeVideo();
+      return;
+    }
+    // 3. If viewfinder or ending is open, back goes home
+    if ((vfOverlay && !vfOverlay.classList.contains('hidden')) ||
+        (endingScreen && !endingScreen.classList.contains('hidden'))) {
+      goHome();
+      return;
+    }
+  });
+}
+
 // ─── Wire up global buttons (mute / heart / back / restart) ──────────────────
 function wireGlobalButtons() {
   // All mute / BGM buttons
   ['bgm-toggle', 'vf-mute', 'player-mute', 'ending-mute'].forEach(id => {
-    document.getElementById(id)?.addEventListener('click', toggleBGM);
+    addTapListener(id, toggleBGM);
   });
 
   // Heart / memories buttons → open menu panel
   ['vf-heart', 'pin-heart', 'ending-heart'].forEach(id => {
-    document.getElementById(id)?.addEventListener('click', () => menuPanel.classList.add('open'));
+    addTapListener(id, () => {
+      menuPanel.classList.add('open');
+      pushHistory('menu');
+    });
   });
 
   // Viewfinder BACK and RESTART → go back to PIN home screen
-  document.getElementById('vf-back')?.addEventListener('click',    goHome);
-  document.getElementById('vf-restart')?.addEventListener('click', goHome);
+  addTapListener('vf-back', () => {
+    goHome();
+  });
+  addTapListener('vf-restart', () => {
+    goHome();
+  });
 }
 
 
@@ -240,6 +299,7 @@ function pinCorrect() {
   pinBoxes.forEach(b => { b.classList.add('correct'); b.disabled = true; });
   pinError.classList.remove('show');
   startBGM(); // Explicitly trigger BGM on correct PIN
+  pushHistory('ar');
   setTimeout(() => {
     hide(pinScreen);
     show(loadingScreen);
@@ -410,7 +470,7 @@ function setupPlayer() {
   playerTapArea.addEventListener('click', toggleControls);
 
   // ← BACK closes video
-  playerClose.addEventListener('click', closeVideo);
+  addTapListener(playerClose, closeVideo);
 }
 
 function showControls() {
@@ -450,6 +510,7 @@ function openVideo(target) {
   playerTitle.textContent = `${target.emoji} ${target.title}`;
 
   show(videoOverlay);
+  pushHistory('video');
 
   playerVideo.currentTime = 0;
   playerVideo.muted = false;
@@ -468,6 +529,7 @@ function closeVideo() {
   playerUi.classList.remove('hidden-controls');
   hide(videoOverlay);
   resumeBGM();
+  currentHistoryScreen = 'ar';
 
   // Both memories collected? Show ending after brief delay
   if (TARGETS.every(t => t.collected)) {
@@ -511,14 +573,15 @@ function launchEndingSparkles() {
 // MENU
 // ════════════════════════════════════════════════════════════════════════════
 function setupMenu() {
-  menuClose?.addEventListener('click', () => menuPanel.classList.remove('open'));
+  addTapListener(menuClose, () => menuPanel.classList.remove('open'));
 
-  replayBtn?.addEventListener('click', () => {
+  addTapListener(replayBtn, () => {
     hide(endingScreen);
     menuPanel.classList.add('open');
+    pushHistory('menu');
   });
 
-  document.getElementById('home-btn')?.addEventListener('click', goHome);
+  addTapListener('home-btn', goHome);
 }
 
 function addToMenu(target) {
@@ -533,7 +596,7 @@ function addToMenu(target) {
       <p>Tap to replay</p>
     </div>
     <button class="menu-card-play" aria-label="Play">▶</button>`;
-  card.addEventListener('click', () => {
+  addTapListener(card, () => {
     menuPanel.classList.remove('open');
     openVideo(target);
   });
@@ -545,6 +608,7 @@ function addToMenu(target) {
 // GO HOME  (resets full experience, returns to PIN screen)
 // ════════════════════════════════════════════════════════════════════════════
 function goHome() {
+  currentHistoryScreen = 'pin';
   // Stop video
   playerVideo.pause();
   playerVideo.src = '';
